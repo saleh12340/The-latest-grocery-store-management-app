@@ -7,8 +7,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
 import com.saleh.alazzi.grocery.data.backup.GroceryBackupManager
 import com.saleh.alazzi.grocery.data.local.GroceryDatabase
@@ -28,18 +30,33 @@ class MainActivity : ComponentActivity() {
         )[GroceryViewModel::class.java]
 
         setContent {
-            val colors = lightColorScheme(
-                primary = Color(0xFF155E9B),
-                onPrimary = Color.White,
-                primaryContainer = Color(0xFFDCEBFA),
-                onPrimaryContainer = Color(0xFF123B5A),
-                secondary = Color(0xFF16804A),
-                error = Color(0xFFB42318),
-                background = Color(0xFFF3F5F7),
-                surface = Color(0xFFFFFFFF),
-                onSurface = Color(0xFF182230),
-                onSurfaceVariant = Color(0xFF475467)
-            )
+            val colors = if (isSystemInDarkTheme()) {
+                darkColorScheme(
+                    primary = Color(0xFF8CC8FF),
+                    onPrimary = Color(0xFF003354),
+                    primaryContainer = Color(0xFF17486E),
+                    onPrimaryContainer = Color(0xFFD0E8FF),
+                    secondary = Color(0xFF72D5A0),
+                    error = Color(0xFFFFB4AB),
+                    background = Color(0xFF101820),
+                    surface = Color(0xFF18232D),
+                    onSurface = Color(0xFFE6EDF4),
+                    onSurfaceVariant = Color(0xFFB8C4CE)
+                )
+            } else {
+                lightColorScheme(
+                    primary = Color(0xFF155E9B),
+                    onPrimary = Color.White,
+                    primaryContainer = Color(0xFFDCEBFA),
+                    onPrimaryContainer = Color(0xFF123B5A),
+                    secondary = Color(0xFF16804A),
+                    error = Color(0xFFB42318),
+                    background = Color(0xFFF3F5F7),
+                    surface = Color(0xFFFFFFFF),
+                    onSurface = Color(0xFF182230),
+                    onSurfaceVariant = Color(0xFF475467)
+                )
+            }
             MaterialTheme(colorScheme = colors) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     GroceryApp(viewModel, GroceryBackupManager(applicationContext, database))
