@@ -638,6 +638,9 @@ private fun InvoiceEntryScreen(
             OutlinedTextField(paid, { paid = it }, modifier = Modifier.weight(1f), label = { Text("المدفوع") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         }
         Text("الإجمالي: ${subtotal ?: "—"}    بعد الخصم: ${finalTotal ?: "—"}    المتبقي: ${remaining ?: "—"}", fontWeight = FontWeight.Bold)
+        if (selectedAccountId == null && remaining != null && remaining > 0) {
+            Text("الفاتورة النقدية تتطلب سداد كامل الإجمالي أو اختيار حساب", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
         Button(
             onClick = {
                 val sub = subtotal ?: return@Button
@@ -703,7 +706,7 @@ private fun InvoiceEntryScreen(
                 if (isSale) viewModel.createSale(request, finish, saved)
                 else viewModel.createPurchase(request, finish, saved)
             },
-            enabled = cart.isNotEmpty() && finalTotal != null && paidValue != null && paidValue >= 0 && paidValue <= (finalTotal ?: 0L) && !saving,
+            enabled = cart.isNotEmpty() && finalTotal != null && paidValue != null && paidValue >= 0 && paidValue <= (finalTotal ?: 0L) && (selectedAccountId != null || remaining == 0L) && !saving,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (saving) "جارٍ الحفظ..." else "حفظ الفاتورة") }
     }
