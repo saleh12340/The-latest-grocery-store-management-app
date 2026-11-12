@@ -139,8 +139,19 @@ interface CashDao {
 @Dao
 interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(value: ExpenseEntity)
+    @Query("SELECT * FROM expenses WHERE operationId=:operationId LIMIT 1")
+    suspend fun findByOperationId(operationId: String): ExpenseEntity?
     @Query("SELECT * FROM expenses ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<ExpenseEntity>>
+}
+
+@Dao
+interface TransferDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(value: TransferEntity)
+    @Query("SELECT * FROM transfers WHERE operationId=:operationId LIMIT 1")
+    suspend fun findByOperationId(operationId: String): TransferEntity?
+    @Query("SELECT * FROM transfers ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<TransferEntity>>
 }
 
 @Dao
