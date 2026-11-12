@@ -45,6 +45,8 @@ class GroceryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val users = database.references().observeUsers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val storeSettings = database.references().observeSettings()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val _session = MutableStateFlow<UserEntity?>(null)
     val session = _session.asStateFlow()
 
@@ -77,6 +79,30 @@ class GroceryViewModel(
 
     private val eventChannel = Channel<String>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
+
+    fun saveStoreSettings(storeName: String, phone: String, address: String, receiptFooter: String) {
+        viewModelScope.launch {
+            runCatching {
+                val cleanName = storeName.trim()
+                require(cleanName.isNotBlank()) { "اكتب اسم المتجر" }
+                val now = System.currentTimeMillis()
+                database.withTransaction {
+                    val values = mapOf(
+                        "store_name" to cleanName,
+                        "store_phone" to phone.trim(),
+                        "store_address" to address.trim(),
+                        "receipt_footer" to receiptFooter.trim()
+                    )
+                    values.forEach { (key, value) ->
+                        database.references().putSetting(
+                            com.saleh.alazzi.grocery.data.local.entity.AppSettingEntity(key, value, now)
+                        )
+                    }
+                }
+            }.onSuccess { eventChannel.send("تم حفظ إعدادات المتجر") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ إعدادات المتجر")) }
+        }
+    }
 
     fun addCustomer(name: String, phone: String, address: String, notes: String) {
         viewModelScope.launch {
