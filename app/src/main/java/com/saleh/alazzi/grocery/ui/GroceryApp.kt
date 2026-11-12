@@ -1403,7 +1403,7 @@ private fun SalesInvoiceDetailScreen(id: String, viewModel: GroceryViewModel, on
     if (showReturn && invoice != null) ReturnDialog(
         title = "مرتجع فاتورة البيع",
         lines = lines.map { ReturnLineUi(it.id, it.itemNameSnapshot, it.quantityMilli, it.unitPrice, it.lineTotal) },
-        onSave = { returnLines, note, operationId -> viewModel.returnSale(id, returnLines, note, operationId); showReturn = false },
+        onSave = { returnLines, note, operationId -> viewModel.returnSale(id, returnLines, note, operationId) { saved -> if (saved) showReturn = false } },
         onDismiss = { showReturn = false }
     )
 }
@@ -1436,7 +1436,7 @@ private fun PurchaseInvoiceDetailScreen(id: String, viewModel: GroceryViewModel,
     if (showReturn && invoice != null) ReturnDialog(
         title = "مرتجع فاتورة الشراء",
         lines = lines.map { ReturnLineUi(it.id, it.itemNameSnapshot, it.quantityMilli, it.unitCost, it.lineTotal) },
-        onSave = { returnLines, note, operationId -> viewModel.returnPurchase(id, returnLines, note, operationId); showReturn = false },
+        onSave = { returnLines, note, operationId -> viewModel.returnPurchase(id, returnLines, note, operationId) { saved -> if (saved) showReturn = false } },
         onDismiss = { showReturn = false }
     )
 }
