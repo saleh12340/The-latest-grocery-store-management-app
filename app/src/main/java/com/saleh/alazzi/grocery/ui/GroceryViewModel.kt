@@ -1,0 +1,147 @@
+package com.saleh.alazzi.grocery.ui
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.saleh.alazzi.grocery.data.local.GroceryDatabase
+import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
+import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
+import com.saleh.alazzi.grocery.data.local.entity.SupplierEntity
+import com.saleh.alazzi.grocery.data.repository.CreateInvoiceInput
+import com.saleh.alazzi.grocery.data.repository.GroceryRepository
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+class GroceryViewModel(
+    private val database: GroceryDatabase,
+    private val repository: GroceryRepository
+) : ViewModel() {
+    val customers = database.customers().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val suppliers = database.suppliers().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val items = database.items().observeActive()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val lowStockItems = database.items().observeLowStock()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val cashBalance = database.cash().observeBalance()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+    private val eventChannel = Channel<String>(Channel.BUFFERED)
+    val events = eventChannel.receiveAsFlow()
+
+    fun addCustomer(name: String, phone: String, address: String, notes: String) {
+        viewModelScope.launch {
+            runCatching {
+                val cleanName = name.trim()
+                require(cleanName.isNotEmpty()) { "اكتب اسم العميل" }
+                val now = System.currentTimeMillis()
+                database.customers().insert(
+                    CustomerEntity(
+                        id = UUID.randomUUID().toString(),
+                        name = cleanName,
+                        phone = phone.trim().ifBlank { null },
+                        address = address.trim().ifBlank { null },
+                        notes = notes.trim().ifBlank { null },
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+            }.onSuccess { eventChannel.send("تمت إضافة العميل") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر إضافة العميل")) }
+        }
+    }
+
+    fun addSupplier(name: String, phone: String, address: String, notes: String) {
+        viewModelScope.launch {
+            runCatching {
+                val cleanName = name.trim()
+                require(cleanName.isNotEmpty()) { "اكتب اسم المورد" }
+                val now = System.currentTimeMillis()
+                database.suppliers().insert(
+                    SupplierEntity(
+                        id = UUID.randomUUID().toString(),
+                        name = cleanName,
+                        phone = phone.trim().ifBlank { null },
+                        address = address.trim().ifBlank { null },
+                        notes = notes.trim().ifBlank { null },
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+            }.onSuccess { eventChannel.send("تمت إضافة المورد") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر إضافة المورد")) }
+        }
+    }
+
+    fun addItem(name: String, barcode: String, quantity: String, purchasePrice: String, salePrice: String) {
+        viewModelScope.launch {
+            runCatching {
+                val cleanName = name.trim()
+                require(cleanName.isNotEmpty()) { "اكتب اسم الصنف" }
+                val now = System.currentTimeMillis()
+                val quantityMilli = (quantity.toBigDecimalOrNull() ?: error("الكمية غير صحيحة"))
+                    .multiply(java.math.BigDecimal("1000")).longValueExact()
+                val buy = purchasePrice.toLongOrNull() ?: error("سعر الشراء غير صحيح")
+                val sell = salePrice.toLongOrNull() ?: error("سعر البيع غير صحيح")
+                require(quantityMilli >= 0 && buy >= 0 && sell >= 0) { "لا تقبل القيم السالبة" }
+                database.items().insert(
+                    ItemEntity(
+                        id = UUID.randomUUID().toString(),
+                        name = cleanName,
+                        barcode = barcode.trim().ifBlank { null },
+                        quantityMilli = quantityMilli,
+                        purchasePrice = buy,
+                        salePrice = sell,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+            }.onSuccess { eventChannel.send("تمت إضافة الصنف") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر إضافة الصنف")) }
+        }
+    }
+
+    fun createSale(input: CreateInvoiceInput) {
+        viewModelScope.launch {
+            runCatching { repository.createSale(input) }
+                .onSuccess {
+                    eventChannel.send(
+                        if (it.wasDuplicate) "هذه الفاتورة محفوظة مسبقاً: ${it.invoiceNumber}"
+                        else "تم حفظ فاتورة البيع رقم ${it.invoiceNumber}"
+                    )
+                }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ فاتورة البيع")) }
+        }
+    }
+
+    fun createPurchase(input: CreateInvoiceInput) {
+        viewModelScope.launch {
+            runCatching { repository.createPurchase(input) }
+                .onSuccess {
+                    eventChannel.send(
+                        if (it.wasDuplicate) "فاتورة الشراء محفوظة مسبقاً: ${it.invoiceNumber}"
+                        else "تم حفظ فاتورة الشراء رقم ${it.invoiceNumber}"
+                    )
+                }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ فاتورة الشراء")) }
+        }
+    }
+
+    private fun messageFor(error: Throwable, fallback: String): String =
+        error.message?.takeIf { it.isNotBlank() } ?: fallback
+
+    class Factory(
+        private val database: GroceryDatabase,
+        private val repository: GroceryRepository
+    ) : androidx.lifecycle.ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            require(modelClass.isAssignableFrom(GroceryViewModel::class.java))
+            return GroceryViewModel(database, repository) as T
+        }
+    }
+}
