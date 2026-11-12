@@ -321,3 +321,14 @@ data class BackupHistoryEntity(
     val createdAt: Long,
     val result: String
 )
+
+
+data class FinancialReportSummary(
+    val sales: Long,
+    val purchases: Long,
+    val grossProfit: Long,
+    val salesInvoices: Long,
+    val salesReturns: Long,
+    val purchaseReturns: Long,
+    val expenses: Long
+)
