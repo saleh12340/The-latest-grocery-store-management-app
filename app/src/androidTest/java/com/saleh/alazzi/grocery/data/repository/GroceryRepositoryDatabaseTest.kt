@@ -149,6 +149,29 @@ class GroceryRepositoryDatabaseTest {
     }
 
     @Test
+    fun purchaseInvoiceAddsStockAndRecordsMovementExactlyOnce() = runBlocking {
+        val input = CreateInvoiceInput(
+            operationId = "purchase-stock-once",
+            customerOrSupplierId = "supplier-1",
+            lines = listOf(InvoiceLineInput("item-1", 2_500, 100)),
+            paid = 0,
+            paymentMethod = "CASH",
+            createdAt = now
+        )
+
+        val first = repository.createPurchase(input)
+        val retry = repository.createPurchase(input)
+
+        assertEquals(false, first.wasDuplicate)
+        assertEquals(true, retry.wasDuplicate)
+        assertEquals(first.invoiceId, retry.invoiceId)
+        assertEquals(7_500L, database.items().findById("item-1")!!.quantityMilli)
+        assertEquals(1, database.stock().observeMovements("item-1").first().size)
+        assertEquals(1, database.purchaseInvoices().lines(first.invoiceId).size)
+        assertEquals(250L, database.purchaseInvoices().findById(first.invoiceId)!!.total)
+    }
+
+    @Test
     fun purchaseReturnReducesSupplierDebtAndStock() = runBlocking {
         val purchase = repository.createPurchase(
             CreateInvoiceInput(
