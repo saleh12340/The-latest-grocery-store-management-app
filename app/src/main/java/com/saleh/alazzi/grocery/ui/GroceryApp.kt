@@ -118,6 +118,7 @@ fun GroceryApp(viewModel: GroceryViewModel) {
     val grossProfitToday by viewModel.grossProfitToday.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val transfers by viewModel.transfers.collectAsState()
+    val notes by viewModel.notes.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.events.collect { snackbar.showSnackbar(it) }
@@ -191,7 +192,7 @@ fun GroceryApp(viewModel: GroceryViewModel) {
             composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, viewModel) }
             composable(Routes.PURCHASE) { InvoiceEntryScreen(false, items, customers, suppliers, viewModel) }
             composable(Routes.REPORTS) { ReportsScreen(cash, customers, suppliers, items, lowStock) }
-            composable(Routes.NOTES) { SimpleInfoScreen("دفتر الملاحظات", "سيتم ربط إدارة الملاحظات بقاعدة البيانات في المرحلة التالية.") }
+            composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
             composable(Routes.PRINTER) { PrinterScreen() }
             composable(Routes.EXPENSES) { ExpensesScreen(expenses, viewModel) }
             composable(Routes.TRANSFERS) { TransfersScreen(transfers, viewModel) }
@@ -949,6 +950,56 @@ private fun TransfersScreen(values: List<com.saleh.alazzi.grocery.data.local.ent
                         showAdd = false
                     }
                 }) { Text("حفظ الحوالة") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("إلغاء") } }
+        )
+    }
+}
+
+
+@Composable
+private fun NotesScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.NoteEntity>, viewModel: GroceryViewModel) {
+    var showAdd by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("دفتر الملاحظات", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Button(onClick = { showAdd = true }) { Icon(Icons.Default.Add, null); Text("ملاحظة") }
+        }
+        if (values.isEmpty()) EmptyState("دفتر الملاحظات فارغ", "أضف ملاحظاتك المهمة هنا")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { note ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(note.title.ifBlank { "ملاحظة" }, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            TextButton(onClick = { viewModel.toggleNotePin(note) }) { Text(if (note.isPinned) "إلغاء التثبيت" else "تثبيت") }
+                            TextButton(onClick = { viewModel.deleteNote(note.id) }) { Text("حذف", color = Color(0xFFB42318)) }
+                        }
+                        Text(note.body)
+                    }
+                }
+            }
+        }
+    }
+    if (showAdd) {
+        var title by remember { mutableStateOf("") }
+        var body by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("إضافة ملاحظة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(title, { title = it }, label = { Text("العنوان") }, singleLine = true)
+                    OutlinedTextField(body, { body = it }, label = { Text("المحتوى") }, minLines = 3)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (title.isNotBlank() || body.isNotBlank()) {
+                        viewModel.addNote(title, body)
+                        showAdd = false
+                    }
+                }) { Text("حفظ") }
             },
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("إلغاء") } }
         )
