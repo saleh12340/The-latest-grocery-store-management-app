@@ -208,10 +208,10 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
             composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
             composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
             composable(Routes.PRINTER) { PrinterScreen() }
-            composable(Routes.EXPENSES) { ExpensesScreen(expenses, viewModel) }
-            composable(Routes.TRANSFERS) { TransfersScreen(transfers, viewModel) }
-            composable(Routes.BACKUP) { BackupScreen(backupManager) }
-            composable(Routes.USERS) { UsersScreen(users, viewModel) }
+            composable(Routes.EXPENSES) { if (session?.role == "MANAGER") ExpensesScreen(expenses, viewModel) else EmptyState("غير مصرح", "المصروفات للمدير فقط") }
+            composable(Routes.TRANSFERS) { if (session?.role == "MANAGER") TransfersScreen(transfers, viewModel) else EmptyState("غير مصرح", "الحوالات للمدير فقط") }
+            composable(Routes.BACKUP) { if (session?.role == "MANAGER") BackupScreen(backupManager) else EmptyState("غير مصرح", "النسخ الاحتياطي للمدير فقط") }
+            composable(Routes.USERS) { if (session?.role == "MANAGER") UsersScreen(users, viewModel) else EmptyState("غير مصرح", "إدارة المستخدمين للمدير فقط") }
         }
     }
 }
