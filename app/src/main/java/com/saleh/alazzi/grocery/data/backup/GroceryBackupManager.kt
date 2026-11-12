@@ -110,7 +110,7 @@ class GroceryBackupManager(
 
         val before = readSnapshot()
         val beforeJson = gson.toJson(before)
-        val preRestore = File(context.filesDir, "pre_restore_${System.currentTimeMillis()}.json")
+        val preRestore = File(context.filesDir, "pre_restore_${System.currentTimeMillis()}_${UUID.randomUUID()}.json")
         preRestore.writeText(gson.toJson(encrypt(beforeJson, passphrase, sha256(beforeJson))), Charsets.UTF_8)
 
         database.withTransaction {
