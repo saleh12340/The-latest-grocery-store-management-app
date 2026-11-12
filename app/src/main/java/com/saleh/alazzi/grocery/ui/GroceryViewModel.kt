@@ -93,7 +93,7 @@ class GroceryViewModel(
 
     val reportSummary = _reportPeriod.flatMapLatest { period ->
         val (from, to) = reportRange(period)
-        combine(
+        combine<Long, ReportSummary>(
             arrayOf(
                 database.salesInvoices().observeSalesTotal(from, to),
                 database.purchaseInvoices().observePurchaseTotal(from, to),
