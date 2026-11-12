@@ -70,6 +70,14 @@ interface SalesInvoiceDao {
     suspend fun maxInvoiceNumber(): Long
     @Query("SELECT * FROM sales_invoices WHERE customerId=:customerId ORDER BY createdAt DESC")
     fun observeForCustomer(customerId: String): Flow<List<SalesInvoiceEntity>>
+
+    @Query("SELECT COALESCE(SUM(total),0) FROM sales_invoices WHERE status='POSTED' AND createdAt>=:from AND createdAt<:to")
+    fun observeSalesTotal(from: Long, to: Long): Flow<Long>
+    @Query("SELECT COUNT(*) FROM sales_invoices WHERE status='POSTED' AND createdAt>=:from AND createdAt<:to")
+    fun observeSalesCount(from: Long, to: Long): Flow<Long>
+    @Query("SELECT COALESCE(SUM(si.lineTotal - ((si.unitCostSnapshot * si.quantityMilli + 500) / 1000)),0) FROM sales_invoice_items si INNER JOIN sales_invoices s ON s.id=si.invoiceId WHERE s.status='POSTED' AND s.createdAt>=:from AND s.createdAt<:to")
+    fun observeGrossProfit(from: Long, to: Long): Flow<Long>
+
     @Query("UPDATE sales_invoices SET status=:status WHERE id=:id AND status='POSTED'")
     suspend fun changePostedStatus(id: String, status: String): Int
 }
@@ -88,6 +96,10 @@ interface PurchaseInvoiceDao {
     suspend fun maxInvoiceNumber(): Long
     @Query("SELECT * FROM purchase_invoices WHERE supplierId=:supplierId ORDER BY createdAt DESC")
     fun observeForSupplier(supplierId: String): Flow<List<PurchaseInvoiceEntity>>
+
+    @Query("SELECT COALESCE(SUM(total),0) FROM purchase_invoices WHERE status='POSTED' AND createdAt>=:from AND createdAt<:to")
+    fun observePurchaseTotal(from: Long, to: Long): Flow<Long>
+
 }
 
 @Dao
