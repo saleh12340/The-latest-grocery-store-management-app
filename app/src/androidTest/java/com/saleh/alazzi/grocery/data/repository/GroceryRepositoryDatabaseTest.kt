@@ -1,0 +1,102 @@
+package com.saleh.alazzi.grocery.data.repository
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.saleh.alazzi.grocery.data.local.GroceryDatabase
+import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
+import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class GroceryRepositoryDatabaseTest {
+    private lateinit var database: GroceryDatabase
+    private lateinit var repository: GroceryRepository
+    private val now = 1_800_000_000_000L
+
+    @Before
+    fun setUp() = runBlocking {
+        val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
+        database = Room.inMemoryDatabaseBuilder(context, GroceryDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        repository = GroceryRepository(database)
+        database.customers().insert(
+            CustomerEntity(
+                id = "customer-1",
+                name = "عميل اختبار",
+                balance = 0,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        database.items().insert(
+            ItemEntity(
+                id = "item-1",
+                name = "صنف اختبار",
+                quantityMilli = 5_000,
+                purchasePrice = 60,
+                salePrice = 100,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+    }
+
+    @After
+    fun tearDown() {
+        if (::database.isInitialized) database.close()
+    }
+
+    @Test
+    fun salePostsInvoiceStockLedgerAndCashExactlyOnce() = runBlocking {
+        val input = CreateInvoiceInput(
+            operationId = "sale-operation-001",
+            customerOrSupplierId = "customer-1",
+            lines = listOf(InvoiceLineInput("item-1", 2_000, 100)),
+            paid = 50,
+            paymentMethod = "CASH",
+            createdAt = now
+        )
+
+        val first = repository.createSale(input)
+        val retry = repository.createSale(input)
+
+        assertEquals(false, first.wasDuplicate)
+        assertEquals(true, retry.wasDuplicate)
+        assertEquals(first.invoiceId, retry.invoiceId)
+        assertEquals(3_000L, database.items().findById("item-1")!!.quantityMilli)
+        assertEquals(150L, database.customers().findById("customer-1")!!.balance)
+        assertEquals(50L, database.cash().observeBalance().first())
+        assertEquals(1, database.salesInvoices().lines(first.invoiceId).size)
+        assertEquals(2, database.ledger().observeCustomer("customer-1").first().size)
+    }
+
+    @Test
+    fun insufficientStockRollsBackInvoiceLedgerAndCash() = runBlocking {
+        val input = CreateInvoiceInput(
+            operationId = "sale-operation-insufficient",
+            customerOrSupplierId = "customer-1",
+            lines = listOf(InvoiceLineInput("item-1", 6_000, 100)),
+            paid = 100,
+            paymentMethod = "CASH",
+            createdAt = now
+        )
+
+        runCatching { repository.createSale(input) }
+
+        assertEquals(null, database.salesInvoices().findByOperationId(input.operationId))
+        assertEquals(5_000L, database.items().findById("item-1")!!.quantityMilli)
+        assertEquals(0L, database.customers().findById("customer-1")!!.balance)
+        assertEquals(0L, database.cash().observeBalance().first())
+        assertNotNull(database.customers().findById("customer-1"))
+    }
+}
