@@ -493,8 +493,8 @@ private fun StockAdjustmentDialog(item: ItemEntity, viewModel: GroceryViewModel,
 }
 
 @Composable
-private fun AddItemDialog(viewModel: GroceryViewModel, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf("") }
+private fun AddItemDialog(viewModel: GroceryViewModel, initialName: String = "", onDismiss: () -> Unit) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
     var barcode by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf("0") }
     var purchase by remember { mutableStateOf("0") }
@@ -554,6 +554,7 @@ private fun InvoiceEntryScreen(
     val storeProfile = storeSettings.associate { it.key to it.value }
     var selectedItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var itemQuery by rememberSaveable { mutableStateOf("") }
+    var showAddItem by remember { mutableStateOf(false) }
     var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var quantity by rememberSaveable { mutableStateOf("1") }
     var unitPrice by rememberSaveable { mutableStateOf("") }
@@ -612,7 +613,14 @@ private fun InvoiceEntryScreen(
             singleLine = true
         )
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (filteredItems.isEmpty()) item { EmptyState("لا توجد أصناف مطابقة", "تحقق من الاسم أو الباركود") }
+            if (filteredItems.isEmpty()) item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    EmptyState("لا توجد أصناف مطابقة", "تحقق من الاسم أو الباركود")
+                    if (!isSale) {
+                        TextButton(onClick = { showAddItem = true }) { Text("إضافة صنف جديد إلى المخزون") }
+                    }
+                }
+            }
             items(filteredItems, key = { it.id }) { item ->
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable {
@@ -762,6 +770,8 @@ private fun InvoiceEntryScreen(
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (saving) "جارٍ الحفظ..." else "حفظ الفاتورة") }
     }
+
+    if (showAddItem) AddItemDialog(viewModel, initialName = itemQuery.trim()) { showAddItem = false }
 
     pendingReceipt?.let { receipt ->
         AlertDialog(
