@@ -8,6 +8,33 @@ import org.junit.Test
 
 class EscPosRasterEncoderTest {
     @Test
+    fun receiptRendererIncludesConfigurableStoreProfileWithoutBreakingRasterSize() {
+        val bitmap = ReceiptRenderer.render(
+            ReceiptData(
+                storeName = "بقالة العزي",
+                invoiceType = "فاتورة اختبار",
+                invoiceNumber = "1001",
+                dateTime = "2026/11/12",
+                partyName = "عميل اختبار",
+                items = listOf(ReceiptItem("سكر", "1", 100, 100)),
+                subtotal = 100,
+                discount = 0,
+                total = 100,
+                paid = 100,
+                remaining = 0,
+                storePhone = "777000000",
+                storeAddress = "الحديدة",
+                footer = "شكراً لزيارتكم"
+            ),
+            384
+        )
+
+        assertEquals(384, bitmap.width)
+        assertTrue(bitmap.height > 200)
+        bitmap.recycle()
+    }
+
+    @Test
     fun createsCorrectRasterBandHeadersFor58MillimeterWidth() {
         val bitmap = Bitmap.createBitmap(384, 300, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(Color.WHITE)
