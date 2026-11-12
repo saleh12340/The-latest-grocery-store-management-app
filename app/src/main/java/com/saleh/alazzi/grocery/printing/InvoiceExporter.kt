@@ -43,7 +43,7 @@ class InvoiceExporter(private val context: Context) {
             FileOutputStream(file).use { output ->
                 check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
             }
-            FileProvider.getUriForFile(context, "\${context.packageName}.files", file)
+            FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         }
     }
 
@@ -80,7 +80,7 @@ class InvoiceExporter(private val context: Context) {
                 val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "AlAzzi").apply { mkdirs() }
                 val file = File(directory, safeName(fileName, "pdf"))
                 FileOutputStream(file).use { document.writeTo(it) }
-                FileProvider.getUriForFile(context, "\${context.packageName}.files", file)
+                FileProvider.getUriForFile(context, "${context.packageName}.files", file)
             }
         } finally {
             document.close()
