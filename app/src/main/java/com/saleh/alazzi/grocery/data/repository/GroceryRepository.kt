@@ -409,4 +409,105 @@ class GroceryRepository(private val database: GroceryDatabase) {
         )
     }
 
+
+    suspend fun recordExpense(
+        operationId: String,
+        category: String,
+        amount: Long,
+        paymentMethod: String,
+        description: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank() && category.isNotBlank() && amount > 0) { "بيانات المصروف غير صحيحة" }
+        if (database.expenses().findByOperationId(operationId) != null) return@withTransaction
+        val id = UUID.randomUUID().toString()
+        database.expenses().insert(
+            ExpenseEntity(
+                id = id,
+                operationId = operationId,
+                category = category.trim(),
+                amount = amount,
+                paymentMethod = paymentMethod,
+                description = description,
+                createdAt = createdAt
+            )
+        )
+        database.cash().insert(
+            CashTransactionEntity(
+                id = UUID.randomUUID().toString(),
+                idempotencyKey = "$operationId:cash",
+                direction = "OUT",
+                amount = amount,
+                sourceType = "EXPENSE",
+                sourceId = id,
+                paymentMethod = paymentMethod,
+                note = description,
+                createdAt = createdAt
+            )
+        )
+        database.references().insertActivity(
+            ActivityLogEntity(
+                id = UUID.randomUUID().toString(),
+                actorId = null,
+                action = "CREATE_EXPENSE",
+                entityType = "EXPENSE",
+                entityId = id,
+                details = "$category: $amount",
+                createdAt = createdAt
+            )
+        )
+    }
+
+    suspend fun recordTransfer(
+        operationId: String,
+        recipientName: String,
+        phone: String,
+        direction: String,
+        amount: Long,
+        fees: Long,
+        paymentMethod: String,
+        status: String,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank() && recipientName.isNotBlank() && amount > 0 && fees >= 0) {
+            "بيانات الحوالة غير صحيحة"
+        }
+        require(direction == "OUT" || direction == "IN") { "اتجاه الحوالة غير صحيح" }
+        if (database.transfers().findByOperationId(operationId) != null) return@withTransaction
+        val net = if (direction == "OUT") Math.addExact(amount, fees) else {
+            require(fees <= amount) { "الرسوم أكبر من مبلغ الحوالة" }
+            Math.subtractExact(amount, fees)
+        }
+        val id = UUID.randomUUID().toString()
+        database.transfers().insert(
+            TransferEntity(
+                id = id,
+                operationId = operationId,
+                recipientName = recipientName.trim(),
+                phone = phone.filter(Char::isDigit),
+                direction = direction,
+                amount = amount,
+                fees = fees,
+                netAmount = net,
+                status = status,
+                note = note,
+                createdAt = createdAt
+            )
+        )
+        database.cash().insert(
+            CashTransactionEntity(
+                id = UUID.randomUUID().toString(),
+                idempotencyKey = "$operationId:cash",
+                direction = direction,
+                amount = net,
+                sourceType = "TRANSFER",
+                sourceId = id,
+                paymentMethod = paymentMethod,
+                note = note,
+                createdAt = createdAt
+            )
+        )
+    }
+
 }
