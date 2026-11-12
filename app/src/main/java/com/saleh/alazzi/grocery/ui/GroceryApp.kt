@@ -518,12 +518,12 @@ private fun InvoiceEntryScreen(
             }
         }
         if (selectedItem != null) {
-            Text("الصنف المحدد: \${selectedItem.name}", fontWeight = FontWeight.Bold)
+            Text("الصنف المحدد: ${selectedItem.name}", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(quantity, { quantity = it }, modifier = Modifier.weight(1f), label = { Text("الكمية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 OutlinedTextField(unitPrice, { unitPrice = it }, modifier = Modifier.weight(1f), label = { Text("سعر الوحدة") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             }
-            Text("الإجمالي: \${lineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("الإجمالي: ${lineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             OutlinedTextField(paid, { paid = it }, modifier = Modifier.fillMaxWidth(), label = { Text("المبلغ المدفوع") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         }
         Button(
@@ -597,7 +597,7 @@ private fun InvoiceEntryScreen(
     pendingReceipt?.let { receipt ->
         AlertDialog(
             onDismissRequest = { pendingReceipt = null },
-            title = { Text("تم حفظ الفاتورة رقم \${receipt.invoiceNumber}") },
+            title = { Text("تم حفظ الفاتورة رقم ${receipt.invoiceNumber}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("يمكنك حفظ صورة أو PDF أو مشاركة نسخة الفاتورة.")
@@ -605,35 +605,35 @@ private fun InvoiceEntryScreen(
                     TextButton(onClick = {
                         runCatching {
                             val bitmap = ReceiptRenderer.render(receipt, 384)
-                            try { exporter.savePng(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            try { exporter.savePng(bitmap, "Invoice_${receipt.invoiceNumber}") } finally { bitmap.recycle() }
                         }.onSuccess { receiptMessage = "تم حفظ صورة الفاتورة" }
                             .onFailure { receiptMessage = it.message ?: "تعذر حفظ الصورة" }
                     }) { Text("حفظ صورة الفاتورة") }
                     TextButton(onClick = {
                         runCatching {
                             val bitmap = ReceiptRenderer.render(receipt, 576)
-                            try { exporter.savePdf(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            try { exporter.savePdf(bitmap, "Invoice_${receipt.invoiceNumber}") } finally { bitmap.recycle() }
                         }.onSuccess { receiptMessage = "تم حفظ ملف PDF" }
                             .onFailure { receiptMessage = it.message ?: "تعذر إنشاء PDF" }
                     }) { Text("حفظ PDF") }
                     TextButton(onClick = {
                         runCatching {
                             val bitmap = ReceiptRenderer.render(receipt, 576)
-                            val uri = try { exporter.savePng(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            val uri = try { exporter.savePng(bitmap, "Invoice_${receipt.invoiceNumber}") } finally { bitmap.recycle() }
                             exporter.share(uri, "image/png")
                         }.onFailure { receiptMessage = it.message ?: "تعذرت المشاركة" }
                     }) { Text("مشاركة صورة الفاتورة") }
                     TextButton(onClick = {
                         runCatching {
                             val bitmap = ReceiptRenderer.render(receipt, 576)
-                            val uri = try { exporter.savePdf(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            val uri = try { exporter.savePdf(bitmap, "Invoice_${receipt.invoiceNumber}") } finally { bitmap.recycle() }
                             exporter.share(uri, "application/pdf")
                         }.onFailure { receiptMessage = it.message ?: "تعذرت مشاركة PDF" }
                     }) { Text("مشاركة PDF") }
                     TextButton(onClick = {
                         runCatching {
                             val bitmap = ReceiptRenderer.render(receipt, 576)
-                            val uri = try { exporter.savePng(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            val uri = try { exporter.savePng(bitmap, "Invoice_${receipt.invoiceNumber}") } finally { bitmap.recycle() }
                             exporter.shareToWhatsApp(uri, "image/png")
                         }.onFailure { receiptMessage = it.message ?: "تعذر فتح WhatsApp أو مشاركة الفاتورة" }
                     }) { Text("مشاركة عبر WhatsApp") }
@@ -659,7 +659,7 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(customer.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(customer.phone ?: "لا يوجد رقم هاتف")
-        Text("الرصيد المستحق: \${customer.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
+        Text("الرصيد المستحق: ${customer.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
         Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth()) { Text("قبض من العميل") }
         Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر الفواتير والدفعات هنا")
@@ -672,7 +672,7 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
                             Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
                         }
                         Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("الرصيد بعد العملية: \${tx.balanceAfter}")
+                        Text("الرصيد بعد العملية: ${tx.balanceAfter}")
                     }
                 }
             }
@@ -694,7 +694,7 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(supplier.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(supplier.phone ?: "لا يوجد رقم هاتف")
-        Text("المبلغ المستحق للمورد: \${supplier.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
+        Text("المبلغ المستحق للمورد: ${supplier.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
         Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth()) { Text("دفع للمورد") }
         Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر فواتير الشراء والدفعات هنا")
@@ -707,7 +707,7 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
                             Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
                         }
                         Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("الرصيد بعد العملية: \${tx.balanceAfter}")
+                        Text("الرصيد بعد العملية: ${tx.balanceAfter}")
                     }
                 }
             }
@@ -765,7 +765,7 @@ private fun PrinterScreen() {
                     .onSuccess { found ->
                         printers = found
                         if (selectedAddress !in found.map { it.address }) selectedAddress = found.firstOrNull()?.address
-                        status = if (found.isEmpty()) "لا توجد طابعات مقترنة. اربط الطابعة من إعدادات Bluetooth في الهاتف." else "تم العثور على \${found.size} جهاز مقترن"
+                        status = if (found.isEmpty()) "لا توجد طابعات مقترنة. اربط الطابعة من إعدادات Bluetooth في الهاتف." else "تم العثور على ${found.size} جهاز مقترن"
                     }
                     .onFailure { status = it.message ?: "تعذر قراءة أجهزة Bluetooth" }
                 busy = false
@@ -785,7 +785,7 @@ private fun PrinterScreen() {
                     .onSuccess { found ->
                         printers = found
                         if (selectedAddress !in found.map { it.address }) selectedAddress = found.firstOrNull()?.address
-                        status = if (found.isEmpty()) "لا توجد طابعات مقترنة. اربط الطابعة من إعدادات Bluetooth في الهاتف." else "تم العثور على \${found.size} جهاز مقترن"
+                        status = if (found.isEmpty()) "لا توجد طابعات مقترنة. اربط الطابعة من إعدادات Bluetooth في الهاتف." else "تم العثور على ${found.size} جهاز مقترن"
                     }
                     .onFailure { status = it.message ?: "تعذر قراءة أجهزة Bluetooth" }
                 busy = false
@@ -875,7 +875,7 @@ private fun ExpensesScreen(values: List<com.saleh.alazzi.grocery.data.local.enti
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Row {
                             Text(expense.category, Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                            Text("-\${expense.amount}", color = Color(0xFFB42318))
+                            Text("-${expense.amount}", color = Color(0xFFB42318))
                         }
                         Text(expense.description ?: "بدون وصف", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -929,7 +929,7 @@ private fun TransfersScreen(values: List<com.saleh.alazzi.grocery.data.local.ent
                             Text(transfer.amount.toString())
                         }
                         Text(transfer.phone)
-                        Text("الرسوم: \${transfer.fees}   الصافي: \${transfer.netAmount}")
+                        Text("الرسوم: ${transfer.fees}   الصافي: ${transfer.netAmount}")
                         Text(if (transfer.direction == "OUT") "صادرة" else "واردة", color = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -959,7 +959,7 @@ private fun TransfersScreen(values: List<com.saleh.alazzi.grocery.data.local.ent
                     OutlinedTextField(note, { note = it }, label = { Text("ملاحظات") })
                     val a = amount.toLongOrNull() ?: 0L
                     val f = fees.toLongOrNull() ?: 0L
-                    Text("الصافي / حركة الصندوق: \${if (direction == "OUT") a + f else a - f}")
+                    Text("الصافي / حركة الصندوق: ${if (direction == "OUT") a + f else a - f}")
                 }
             },
             confirmButton = {
@@ -1042,7 +1042,7 @@ private fun BackupScreen(manager: GroceryBackupManager) {
         if (uri != null) scope.launch {
             busy = true
             runCatching { manager.exportTo(uri) }
-                .onSuccess { status = "نجح النسخ الاحتياطي: \${it.recordCount} سجل. SHA-256: \${it.checksum}" }
+                .onSuccess { status = "نجح النسخ الاحتياطي: ${it.recordCount} سجل. SHA-256: ${it.checksum}" }
                 .onFailure { status = it.message ?: "فشل إنشاء النسخة الاحتياطية" }
             busy = false
         }
@@ -1061,7 +1061,7 @@ private fun BackupScreen(manager: GroceryBackupManager) {
         Text("يتم تصدير البيانات في ملف JSON بإصدار مخطط وبصمة SHA-256 للتحقق من سلامته.")
         Button(
             enabled = !busy,
-            onClick = { createLauncher.launch("AlAzzi_Backup_\${System.currentTimeMillis()}.json") },
+            onClick = { createLauncher.launch("AlAzzi_Backup_${System.currentTimeMillis()}.json") },
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (busy) "جارٍ التنفيذ..." else "إنشاء نسخة احتياطية") }
         FilledTonalButton(
@@ -1094,7 +1094,7 @@ private fun BackupScreen(manager: GroceryBackupManager) {
                         busy = true
                         runCatching { manager.restoreFrom(uri, confirmed = true) }
                             .onSuccess {
-                                status = "نجحت الاستعادة: \${it.recordCount} سجل. تم حفظ نسخة ما قبل الاستعادة."
+                                status = "نجحت الاستعادة: ${it.recordCount} سجل. تم حفظ نسخة ما قبل الاستعادة."
                             }
                             .onFailure { status = it.message ?: "فشلت الاستعادة ولم يتم اعتماد التغييرات" }
                         busy = false
