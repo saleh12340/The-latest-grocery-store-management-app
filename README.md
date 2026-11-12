@@ -61,7 +61,7 @@ gradle compileDebugAndroidTestKotlin
 gradle assembleRelease
 ```
 
-ينفذ GitHub Actions اختبارات الوحدة، ويترجم اختبارات Android، ويشغّل اختبارات الأجهزة على محاكي Android 16، ثم يبني APK Release مع R8 وإزالة الموارد، ويحسب SHA-256 ويرفع Artifact لمدة 14 يوماً.
+ينفذ GitHub Actions اختبارات الوحدة ويترجم اختبارات Android، ثم يبني APK Release المحسّن ويحسب حجمه وSHA-256 ويرفع Artifact أولاً؛ بعد ذلك يشغّل اختبارات الأجهزة على محاكي Android 16.
 
 رابط إجراءات البناء:
 https://github.com/saleh12340/The-latest-grocery-store-management-app/actions
