@@ -184,11 +184,11 @@ class GroceryViewModel(
         }
     }
 
-    fun receiveCustomerPayment(customerId: String, amount: Long, note: String) {
+    fun receiveCustomerPayment(customerId: String, amount: Long, note: String, operationId: String) {
         viewModelScope.launch {
             runCatching {
                 repository.receiveCustomerPayment(
-                    operationId = UUID.randomUUID().toString(),
+                    operationId = operationId,
                     customerId = customerId,
                     amount = amount,
                     paymentMethod = "CASH",
@@ -199,11 +199,11 @@ class GroceryViewModel(
         }
     }
 
-    fun paySupplier(supplierId: String, amount: Long, note: String) {
+    fun paySupplier(supplierId: String, amount: Long, note: String, operationId: String) {
         viewModelScope.launch {
             runCatching {
                 repository.paySupplier(
-                    operationId = UUID.randomUUID().toString(),
+                    operationId = operationId,
                     supplierId = supplierId,
                     amount = amount,
                     paymentMethod = "CASH",
@@ -214,11 +214,11 @@ class GroceryViewModel(
         }
     }
 
-    fun recordExpense(category: String, amount: Long, description: String) {
+    fun recordExpense(category: String, amount: Long, description: String, operationId: String) {
         viewModelScope.launch {
             runCatching {
                 repository.recordExpense(
-                    operationId = UUID.randomUUID().toString(),
+                    operationId = operationId,
                     category = category,
                     amount = amount,
                     paymentMethod = "CASH",
@@ -229,11 +229,11 @@ class GroceryViewModel(
         }
     }
 
-    fun recordTransfer(recipient: String, phone: String, amount: Long, fees: Long, direction: String, note: String) {
+    fun recordTransfer(recipient: String, phone: String, amount: Long, fees: Long, direction: String, note: String, operationId: String) {
         viewModelScope.launch {
             runCatching {
                 repository.recordTransfer(
-                    operationId = UUID.randomUUID().toString(),
+                    operationId = operationId,
                     recipientName = recipient,
                     phone = phone,
                     direction = direction,
@@ -340,17 +340,17 @@ class GroceryViewModel(
     fun purchaseInvoice(id: String) = database.purchaseInvoices().observeById(id)
     fun purchaseInvoiceLines(id: String) = database.purchaseInvoices().observeLines(id)
 
-    fun returnSale(invoiceId: String, lines: List<ReturnLineInput>, note: String) {
+    fun returnSale(invoiceId: String, lines: List<ReturnLineInput>, note: String, operationId: String) {
         viewModelScope.launch {
-            runCatching { repository.returnSale(UUID.randomUUID().toString(), invoiceId, lines, note) }
+            runCatching { repository.returnSale(operationId, invoiceId, lines, note) }
                 .onSuccess { eventChannel.send("تم حفظ مرتجع البيع بقيمة ${it.total}") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع البيع")) }
         }
     }
 
-    fun returnPurchase(invoiceId: String, lines: List<ReturnLineInput>, note: String) {
+    fun returnPurchase(invoiceId: String, lines: List<ReturnLineInput>, note: String, operationId: String) {
         viewModelScope.launch {
-            runCatching { repository.returnPurchase(UUID.randomUUID().toString(), invoiceId, lines, note) }
+            runCatching { repository.returnPurchase(operationId, invoiceId, lines, note) }
                 .onSuccess { eventChannel.send("تم حفظ مرتجع الشراء بقيمة ${it.total}") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع الشراء")) }
         }
