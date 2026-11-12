@@ -99,7 +99,7 @@ class GroceryBackupManager(
         val json = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
             ?: error("تعذر قراءة ملف النسخة الاحتياطية")
         val envelope = gson.fromJson(json, BackupEnvelope::class.java) ?: error("ملف النسخة غير صالح")
-        require(envelope.formatVersion == FORMAT_VERSION) { "إصدار النسخة غير مدعوم: \${envelope.formatVersion}" }
+        require(envelope.formatVersion == FORMAT_VERSION) { "إصدار النسخة غير مدعوم: ${envelope.formatVersion}" }
         val payloadJson = decrypt(envelope, passphrase)
         val calculated = sha256(payloadJson)
         require(MessageDigest.isEqual(calculated.toByteArray(), envelope.sha256.toByteArray())) {
@@ -110,7 +110,7 @@ class GroceryBackupManager(
 
         val before = readSnapshot()
         val beforeJson = gson.toJson(before)
-        val preRestore = File(context.filesDir, "pre_restore_\${System.currentTimeMillis()}.json")
+        val preRestore = File(context.filesDir, "pre_restore_${System.currentTimeMillis()}.json")
         preRestore.writeText(gson.toJson(encrypt(beforeJson, passphrase, sha256(beforeJson))), Charsets.UTF_8)
 
         database.withTransaction {
