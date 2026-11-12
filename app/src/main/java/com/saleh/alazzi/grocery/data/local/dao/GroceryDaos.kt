@@ -184,6 +184,10 @@ interface ReferenceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSetting(value: AppSettingEntity)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertActivity(value: ActivityLogEntity)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertUser(value: UserEntity)
+    @Query("SELECT * FROM users WHERE username=:username LIMIT 1")
+    suspend fun findUser(username: String): UserEntity?
+    @Query("SELECT * FROM users ORDER BY createdAt ASC")
+    fun observeUsers(): Flow<List<UserEntity>>
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertBackup(value: BackupHistoryEntity)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertReturn(value: ReturnEntity)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertReturnItems(values: List<ReturnItemEntity>)
