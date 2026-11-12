@@ -106,6 +106,9 @@ private object Routes {
     const val TRANSFERS = "transfers"
     const val BACKUP = "backup"
     const val USERS = "users"
+    const val INVOICES = "invoices"
+    const val SALES_HISTORY = "sales-history"
+    const val PURCHASE_HISTORY = "purchase-history"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -205,6 +208,21 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
             }
             composable(Routes.INVENTORY) { if (session?.role == "MANAGER") InventoryScreen(items, lowStock.map { it.id }.toSet(), viewModel) else EmptyState("غير مصرح", "هذه الشاشة للمدير فقط") }
             composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, viewModel) }
+            composable(Routes.INVOICES) {
+                InvoiceHubScreen(
+                    onSales = { nav.navigate(Routes.SALES_HISTORY) },
+                    onPurchases = { nav.navigate(Routes.PURCHASE_HISTORY) }
+                )
+            }
+            composable(Routes.SALES_HISTORY) { SalesInvoiceHistoryScreen(salesInvoices) { nav.navigate("sales-invoice/$it") } }
+            composable(Routes.PURCHASE_HISTORY) { PurchaseInvoiceHistoryScreen(purchaseInvoices) { nav.navigate("purchase-invoice/$it") } }
+            composable("sales-invoice/{invoiceId}", arguments = listOf(navArgument("invoiceId") { type = NavType.StringType })) { entry ->
+                SalesInvoiceDetailScreen(entry.arguments?.getString("invoiceId").orEmpty(), viewModel) { nav.popBackStack() }
+            }
+            composable("purchase-invoice/{invoiceId}", arguments = listOf(navArgument("invoiceId") { type = NavType.StringType })) { entry ->
+                PurchaseInvoiceDetailScreen(entry.arguments?.getString("invoiceId").orEmpty(), viewModel) { nav.popBackStack() }
+            }
+
             composable(Routes.PURCHASE) { InvoiceEntryScreen(false, items, customers, suppliers, viewModel) }
             composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
             composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
@@ -284,6 +302,7 @@ private fun HomeScreen(
                 if (isManager) ActionCard("شراء جديد", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.PURCHASE) }
             }
         }
+        item { ActionCard("الفواتير", Icons.Default.ReceiptLong, Modifier.fillMaxWidth()) { onNavigate(Routes.INVOICES) } }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionCard("العملاء", Icons.Default.People, Modifier.weight(1f)) { onNavigate(Routes.CUSTOMERS) }
