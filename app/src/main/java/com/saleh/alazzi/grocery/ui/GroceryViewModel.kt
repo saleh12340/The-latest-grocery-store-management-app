@@ -105,7 +105,7 @@ class GroceryViewModel(
         }
     }
 
-    fun createSale(input: CreateInvoiceInput, onFinished: (Boolean) -> Unit = {}) {
+    fun createSale(input: CreateInvoiceInput, onFinished: (Boolean) -> Unit = {}, onSaved: (com.saleh.alazzi.grocery.data.repository.SaveInvoiceResult) -> Unit = {}) {
         viewModelScope.launch {
             runCatching { repository.createSale(input) }
                 .onSuccess {
@@ -113,6 +113,7 @@ class GroceryViewModel(
                         if (it.wasDuplicate) "هذه الفاتورة محفوظة مسبقاً: ${it.invoiceNumber}"
                         else "تم حفظ فاتورة البيع رقم ${it.invoiceNumber}"
                     )
+                    onSaved(it)
                     onFinished(true)
                 }
                 .onFailure {
@@ -122,7 +123,7 @@ class GroceryViewModel(
         }
     }
 
-    fun createPurchase(input: CreateInvoiceInput, onFinished: (Boolean) -> Unit = {}) {
+    fun createPurchase(input: CreateInvoiceInput, onFinished: (Boolean) -> Unit = {}, onSaved: (com.saleh.alazzi.grocery.data.repository.SaveInvoiceResult) -> Unit = {}) {
         viewModelScope.launch {
             runCatching { repository.createPurchase(input) }
                 .onSuccess {
