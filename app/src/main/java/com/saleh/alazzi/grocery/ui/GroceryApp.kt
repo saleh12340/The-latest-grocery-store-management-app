@@ -69,6 +69,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -517,6 +518,22 @@ private data class DraftInvoiceLine(
     val lineTotal: Long
 )
 
+private val DraftInvoiceCartSaver = listSaver<List<DraftInvoiceLine>, String>(
+    save = { cart ->
+        cart.flatMap { line ->
+            listOf(line.itemId, line.name, line.quantityMilli.toString(), line.unitPrice.toString(), line.lineTotal.toString())
+        }
+    },
+    restore = { saved ->
+        saved.chunked(5).mapNotNull { fields ->
+            if (fields.size != 5) null
+            else runCatching {
+                DraftInvoiceLine(fields[0], fields[1], fields[2].toLong(), fields[3].toLong(), fields[4].toLong())
+            }.getOrNull()
+        }
+    }
+)
+
 @Composable
 private fun InvoiceEntryScreen(
     isSale: Boolean,
@@ -534,7 +551,7 @@ private fun InvoiceEntryScreen(
     var unitPrice by rememberSaveable { mutableStateOf("") }
     var discount by rememberSaveable { mutableStateOf("0") }
     var paid by rememberSaveable { mutableStateOf("0") }
-    var cart by remember { mutableStateOf<List<DraftInvoiceLine>>(emptyList()) }
+    var cart by rememberSaveable(stateSaver = DraftInvoiceCartSaver) { mutableStateOf<List<DraftInvoiceLine>>(emptyList()) }
     var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
     var saving by remember { mutableStateOf(false) }
     var accountMenu by remember { mutableStateOf(false) }
