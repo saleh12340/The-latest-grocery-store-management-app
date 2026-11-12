@@ -703,7 +703,7 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
     if (showPayment) PaymentDialog(
         title = "قبض من العميل",
         maxAmount = customer.balance,
-        onSave = { amount, note -> viewModel.receiveCustomerPayment(id, amount, note); showPayment = false },
+        onSave = { amount, note, operationId -> viewModel.receiveCustomerPayment(id, amount, note, operationId); showPayment = false },
         onDismiss = { showPayment = false }
     )
 }
@@ -738,13 +738,14 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
     if (showPayment) PaymentDialog(
         title = "دفع للمورد",
         maxAmount = supplier.balance,
-        onSave = { amount, note -> viewModel.paySupplier(id, amount, note); showPayment = false },
+        onSave = { amount, note, operationId -> viewModel.paySupplier(id, amount, note, operationId); showPayment = false },
         onDismiss = { showPayment = false }
     )
 }
 
 @Composable
-private fun PaymentDialog(title: String, maxAmount: Long, onSave: (Long, String) -> Unit, onDismiss: () -> Unit) {
+private fun PaymentDialog(title: String, maxAmount: Long, onSave: (Long, String, String) -> Unit, onDismiss: () -> Unit) {
+    var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     AlertDialog(
@@ -760,7 +761,7 @@ private fun PaymentDialog(title: String, maxAmount: Long, onSave: (Long, String)
         confirmButton = {
             Button(onClick = {
                 val value = amount.toLongOrNull()
-                if (value != null && value > 0 && value <= maxAmount) onSave(value, note)
+                if (value != null && value > 0 && value <= maxAmount) onSave(value, note, operationId)
             }) { Text("حفظ العملية") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
@@ -909,6 +910,7 @@ private fun ExpensesScreen(values: List<com.saleh.alazzi.grocery.data.local.enti
         var category by remember { mutableStateOf("") }
         var amount by remember { mutableStateOf("") }
         var description by remember { mutableStateOf("") }
+        var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text("تسجيل مصروف") },
@@ -923,7 +925,7 @@ private fun ExpensesScreen(values: List<com.saleh.alazzi.grocery.data.local.enti
                 Button(onClick = {
                     val value = amount.toLongOrNull()
                     if (value != null && value > 0 && category.isNotBlank()) {
-                        viewModel.recordExpense(category, value, description)
+                        viewModel.recordExpense(category, value, description, operationId)
                         showAdd = false
                     }
                 }) { Text("حفظ المصروف") }
@@ -965,6 +967,7 @@ private fun TransfersScreen(values: List<com.saleh.alazzi.grocery.data.local.ent
         var fees by remember { mutableStateOf("0") }
         var note by remember { mutableStateOf("") }
         var direction by remember { mutableStateOf("OUT") }
+        var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text("تسجيل حوالة") },
@@ -989,7 +992,7 @@ private fun TransfersScreen(values: List<com.saleh.alazzi.grocery.data.local.ent
                     val a = amount.toLongOrNull()
                     val f = fees.toLongOrNull()
                     if (recipient.isNotBlank() && a != null && f != null && a > 0 && f >= 0) {
-                        viewModel.recordTransfer(recipient, phone, a, f, direction, note)
+                        viewModel.recordTransfer(recipient, phone, a, f, direction, note, operationId)
                         showAdd = false
                     }
                 }) { Text("حفظ الحوالة") }
@@ -1305,7 +1308,7 @@ private fun SalesInvoiceDetailScreen(id: String, viewModel: GroceryViewModel, on
     if (showReturn && invoice != null) ReturnDialog(
         title = "مرتجع فاتورة البيع",
         lines = lines.map { ReturnLineUi(it.id, it.itemNameSnapshot, it.quantityMilli, it.unitPrice, it.lineTotal) },
-        onSave = { returnLines, note -> viewModel.returnSale(id, returnLines, note); showReturn = false },
+        onSave = { returnLines, note, operationId -> viewModel.returnSale(id, returnLines, note, operationId); showReturn = false },
         onDismiss = { showReturn = false }
     )
 }
@@ -1338,7 +1341,7 @@ private fun PurchaseInvoiceDetailScreen(id: String, viewModel: GroceryViewModel,
     if (showReturn && invoice != null) ReturnDialog(
         title = "مرتجع فاتورة الشراء",
         lines = lines.map { ReturnLineUi(it.id, it.itemNameSnapshot, it.quantityMilli, it.unitCost, it.lineTotal) },
-        onSave = { returnLines, note -> viewModel.returnPurchase(id, returnLines, note); showReturn = false },
+        onSave = { returnLines, note, operationId -> viewModel.returnPurchase(id, returnLines, note, operationId); showReturn = false },
         onDismiss = { showReturn = false }
     )
 }
@@ -1347,9 +1350,10 @@ private fun PurchaseInvoiceDetailScreen(id: String, viewModel: GroceryViewModel,
 private fun ReturnDialog(
     title: String,
     lines: List<ReturnLineUi>,
-    onSave: (List<com.saleh.alazzi.grocery.data.repository.ReturnLineInput>, String) -> Unit,
+    onSave: (List<com.saleh.alazzi.grocery.data.repository.ReturnLineInput>, String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
     var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var note by remember { mutableStateOf("") }
     AlertDialog(
@@ -1382,7 +1386,7 @@ private fun ReturnDialog(
                     val milli = runCatching { raw.multiply(BigDecimal("1000")).longValueExact() }.getOrNull()
                     if (milli != null && milli > 0) com.saleh.alazzi.grocery.data.repository.ReturnLineInput(line.id, milli) else null
                 }
-                if (selected.isNotEmpty()) onSave(selected, note)
+                if (selected.isNotEmpty()) onSave(selected, note, operationId)
             }, enabled = quantities.values.any { it.toBigDecimalOrNull()?.signum() == 1 }) { Text("حفظ المرتجع") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
