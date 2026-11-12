@@ -77,13 +77,13 @@ class GroceryBackupManager(
             ?: error("تعذر قراءة ملف النسخة الاحتياطية")
         val envelope = gson.fromJson(json, BackupEnvelope::class.java) ?: error("ملف النسخة غير صالح")
         val payload = envelope.payload ?: error("بيانات النسخة غير موجودة")
-        require(payload.formatVersion == FORMAT_VERSION) { "إصدار النسخة غير مدعوم: \${payload.formatVersion}" }
+        require(payload.formatVersion == FORMAT_VERSION) { "إصدار النسخة غير مدعوم: ${payload.formatVersion}" }
         val calculated = sha256(gson.toJson(payload))
         require(MessageDigest.isEqual(calculated.toByteArray(), envelope.sha256.toByteArray())) {
             "فشل التحقق من سلامة النسخة الاحتياطية"
         }
 
-        val preRestore = File(context.filesDir, "pre_restore_\${System.currentTimeMillis()}.json")
+        val preRestore = File(context.filesDir, "pre_restore_${System.currentTimeMillis()}.json")
         val before = readSnapshot()
         preRestore.writeText(gson.toJson(BackupEnvelope(before, sha256(gson.toJson(before)))), Charsets.UTF_8)
 
