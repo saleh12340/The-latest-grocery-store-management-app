@@ -56,8 +56,11 @@ jobs:
       - name: Build optimized release APK
         run: gradle assembleRelease
 
-      - name: Calculate optimized APK SHA-256
-        run: sha256sum app/build/outputs/apk/release/app-release.apk | tee app/build/outputs/apk/release/app-release.apk.sha256
+      - name: Report optimized APK size and SHA-256
+        run: |
+          stat -c 'APK_SIZE_BYTES=%s' app/build/outputs/apk/release/app-release.apk
+          ls -lh app/build/outputs/apk/release/app-release.apk
+          sha256sum app/build/outputs/apk/release/app-release.apk | tee app/build/outputs/apk/release/app-release.apk.sha256
 
       - name: Upload optimized release APK
         uses: actions/upload-artifact@v5
