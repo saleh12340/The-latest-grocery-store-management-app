@@ -7,9 +7,14 @@ import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
 import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
 import com.saleh.alazzi.grocery.data.local.entity.SupplierEntity
 import com.saleh.alazzi.grocery.data.local.entity.NoteEntity
+import com.saleh.alazzi.grocery.data.local.entity.UserEntity
+import com.saleh.alazzi.grocery.security.PinHasher
 import com.saleh.alazzi.grocery.data.repository.CreateInvoiceInput
 import com.saleh.alazzi.grocery.data.repository.GroceryRepository
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -35,6 +40,11 @@ class GroceryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val notes = database.references().observeNotes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val users = database.references().observeUsers()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val _session = MutableStateFlow<UserEntity?>(null)
+    val session = _session.asStateFlow()
+
 
 
     val cashBalance = database.cash().observeBalance()
@@ -254,6 +264,67 @@ class GroceryViewModel(
         viewModelScope.launch {
             database.references().deleteNote(id)
             eventChannel.send("تم حذف الملاحظة")
+        }
+    }
+
+    fun createAdminUser(displayName: String, pin: String) {
+        viewModelScope.launch {
+            runCatching {
+                require(database.references().observeUsers().first().isEmpty()) { "تم إعداد مستخدم مدير مسبقاً" }
+                require(displayName.isNotBlank()) { "اكتب اسم المدير" }
+                val credential = PinHasher.create(pin.toCharArray())
+                val user = UserEntity(
+                    id = UUID.randomUUID().toString(),
+                    username = "admin",
+                    displayName = displayName.trim(),
+                    pinSalt = credential.saltBase64,
+                    pinHash = credential.hashBase64,
+                    role = "MANAGER",
+                    isActive = true,
+                    createdAt = System.currentTimeMillis()
+                )
+                database.references().insertUser(user)
+                _session.value = user
+            }.onSuccess { eventChannel.send("تم إعداد حساب المدير") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر إعداد حساب المدير")) }
+        }
+    }
+
+    fun login(username: String, pin: String) {
+        viewModelScope.launch {
+            val user = database.references().findUser(username.trim())
+            val valid = user != null && user.isActive &&
+                PinHasher.verify(pin.toCharArray(), PinCredential(user.pinSalt, user.pinHash))
+            if (valid) {
+                _session.value = user
+                eventChannel.send("مرحباً \${user!!.displayName}")
+            } else {
+                eventChannel.send("اسم المستخدم أو PIN غير صحيح")
+            }
+        }
+    }
+
+    fun logout() { _session.value = null }
+
+    fun addCashier(displayName: String, username: String, pin: String) {
+        viewModelScope.launch {
+            runCatching {
+                require(_session.value?.role == "MANAGER") { "هذه الصلاحية للمدير فقط" }
+                require(displayName.isNotBlank() && username.isNotBlank()) { "أدخل اسم المستخدم والاسم الظاهر" }
+                val credential = PinHasher.create(pin.toCharArray())
+                val user = UserEntity(
+                    id = UUID.randomUUID().toString(),
+                    username = username.trim(),
+                    displayName = displayName.trim(),
+                    pinSalt = credential.saltBase64,
+                    pinHash = credential.hashBase64,
+                    role = "CASHIER",
+                    isActive = true,
+                    createdAt = System.currentTimeMillis()
+                )
+                database.references().insertUser(user)
+            }.onSuccess { eventChannel.send("تم إنشاء حساب الكاشير") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر إنشاء حساب الكاشير")) }
         }
     }
 
