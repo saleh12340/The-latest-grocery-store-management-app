@@ -137,6 +137,20 @@ interface CashDao {
 }
 
 @Dao
+interface ReturnDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(value: ReturnEntity)
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertItems(values: List<ReturnItemEntity>)
+    @Query("SELECT * FROM returns WHERE operationId=:operationId LIMIT 1")
+    suspend fun findByOperationId(operationId: String): ReturnEntity?
+    @Query("SELECT COALESCE(SUM(ri.quantityMilli),0) FROM return_items ri INNER JOIN returns r ON r.id=ri.returnId WHERE r.originalInvoiceId=:invoiceId AND ri.originalInvoiceItemId=:invoiceItemId")
+    suspend fun returnedQuantity(invoiceId: String, invoiceItemId: String): Long
+    @Query("SELECT COALESCE(SUM(ri.amount),0) FROM return_items ri INNER JOIN returns r ON r.id=ri.returnId WHERE r.originalInvoiceId=:invoiceId AND ri.originalInvoiceItemId=:invoiceItemId")
+    suspend fun returnedAmount(invoiceId: String, invoiceItemId: String): Long
+    @Query("SELECT * FROM returns WHERE originalInvoiceId=:invoiceId ORDER BY createdAt DESC")
+    fun observeForInvoice(invoiceId: String): Flow<List<ReturnEntity>>
+}
+
+@Dao
 interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(value: ExpenseEntity)
     @Query("SELECT * FROM expenses WHERE operationId=:operationId LIMIT 1")
