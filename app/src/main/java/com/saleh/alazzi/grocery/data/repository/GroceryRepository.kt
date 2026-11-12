@@ -25,6 +25,10 @@ data class CreateInvoiceInput(
 
 data class SaveInvoiceResult(val invoiceId: String, val invoiceNumber: String, val wasDuplicate: Boolean)
 
+
+data class ReturnLineInput(val originalInvoiceItemId: String, val quantityMilli: Long)
+data class SaveReturnResult(val returnId: String, val total: Long, val wasDuplicate: Boolean)
+
 /**
  * Posts invoice, ledger, stock and cash effects atomically.
  * Callers must persist the same operationId while retrying the same user action.
@@ -508,6 +512,204 @@ class GroceryRepository(private val database: GroceryDatabase) {
                 createdAt = createdAt
             )
         )
+    }
+
+
+    suspend fun returnSale(
+        operationId: String,
+        invoiceId: String,
+        lines: List<ReturnLineInput>,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ): SaveReturnResult = database.withTransaction {
+        require(operationId.isNotBlank() && lines.isNotEmpty()) { "بيانات المرتجع غير مكتملة" }
+        database.returns().findByOperationId(operationId)?.let {
+            return@withTransaction SaveReturnResult(it.id, it.total, true)
+        }
+        val invoice = database.salesInvoices().findById(invoiceId) ?: error("فاتورة البيع غير موجودة")
+        require(invoice.status == "POSTED") { "لا يمكن إرجاع فاتورة ملغاة" }
+        val originalLines = database.salesInvoices().lines(invoiceId)
+        val returnedLines = lines.map { requested ->
+            require(requested.quantityMilli > 0) { "كمية المرتجع غير صحيحة" }
+            val original = originalLines.firstOrNull { it.id == requested.originalInvoiceItemId }
+                ?: error("الصنف غير موجود في الفاتورة الأصلية")
+            val alreadyQty = database.returns().returnedQuantity(invoiceId, original.id)
+            val remainingQty = Math.subtractExact(original.quantityMilli, alreadyQty)
+            require(requested.quantityMilli <= remainingQty) { "الكمية المرتجعة تتجاوز الكمية المتبقية من الفاتورة" }
+            val rawAmount = MoneyMath.lineTotal(requested.quantityMilli, original.unitPrice)
+            val netLineAmount = MoneyMath.proportionalShare(original.lineTotal, invoice.total, invoice.subtotal)
+            val alreadyAmount = database.returns().returnedAmount(invoiceId, original.id)
+            val amount = if (requested.quantityMilli == remainingQty) {
+                Math.subtractExact(netLineAmount, alreadyAmount)
+            } else {
+                MoneyMath.proportionalShare(rawAmount, invoice.total, invoice.subtotal)
+                    .coerceAtMost(Math.subtractExact(netLineAmount, alreadyAmount))
+            }
+            Triple(requested, original, amount)
+        }
+        val total = returnedLines.fold(0L) { sum, row -> Math.addExact(sum, row.third) }
+        val returnId = UUID.randomUUID().toString()
+        database.returns().insert(
+            ReturnEntity(returnId, operationId, "SALE", invoiceId, total, createdAt, note)
+        )
+        database.returns().insertItems(returnedLines.map { (requested, original, amount) ->
+            ReturnItemEntity(
+                id = UUID.randomUUID().toString(),
+                returnId = returnId,
+                originalInvoiceItemId = original.id,
+                itemId = original.itemId,
+                quantityMilli = requested.quantityMilli,
+                amount = amount
+            )
+        })
+        returnedLines.forEachIndexed { index, (requested, original, _) ->
+            val item = database.items().findById(original.itemId) ?: error("الصنف المرتجع غير موجود")
+            val before = item.quantityMilli
+            val after = Math.addExact(before, requested.quantityMilli)
+            check(database.items().setQuantity(item.id, after, createdAt) == 1)
+            database.stock().insertMovement(
+                StockMovementEntity(
+                    id = UUID.randomUUID().toString(),
+                    operationId = "$operationId:stock:$index",
+                    itemId = item.id,
+                    movementType = "SALE_RETURN",
+                    quantityInMilli = requested.quantityMilli,
+                    quantityOutMilli = 0,
+                    balanceBeforeMilli = before,
+                    balanceAfterMilli = after,
+                    sourceType = "SALE_RETURN",
+                    sourceId = returnId,
+                    note = note,
+                    createdAt = createdAt
+                )
+            )
+        }
+        val customerId = invoice.customerId
+        val creditReduction = if (customerId != null) {
+            val customer = database.customers().findById(customerId) ?: error("العميل المرتبط غير موجود")
+            val reduction = minOf(customer.balance, total)
+            val newBalance = MoneyMath.reduceBalance(customer.balance, reduction)
+            database.ledger().insertCustomer(
+                CustomerTransactionEntity(
+                    UUID.randomUUID().toString(), "$operationId:customer",
+                    customerId, "RETURN", total, newBalance, "SALE_RETURN", returnId, note, createdAt
+                )
+            )
+            check(database.customers().setBalance(customerId, newBalance, createdAt) == 1)
+            reduction
+        } else 0L
+        val cashRefund = Math.subtractExact(total, creditReduction)
+        if (cashRefund > 0) {
+            database.cash().insert(
+                CashTransactionEntity(
+                    UUID.randomUUID().toString(), "$operationId:cash", "OUT", cashRefund,
+                    "SALE_RETURN", returnId, "CASH", note, createdAt
+                )
+            )
+        }
+        database.references().insertActivity(
+            ActivityLogEntity(UUID.randomUUID().toString(), null, "SALE_RETURN", "RETURN", returnId, "مرتجع بقيمة $total", createdAt)
+        )
+        SaveReturnResult(returnId, total, false)
+    }
+
+    suspend fun returnPurchase(
+        operationId: String,
+        invoiceId: String,
+        lines: List<ReturnLineInput>,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ): SaveReturnResult = database.withTransaction {
+        require(operationId.isNotBlank() && lines.isNotEmpty()) { "بيانات المرتجع غير مكتملة" }
+        database.returns().findByOperationId(operationId)?.let {
+            return@withTransaction SaveReturnResult(it.id, it.total, true)
+        }
+        val invoice = database.purchaseInvoices().findById(invoiceId) ?: error("فاتورة الشراء غير موجودة")
+        require(invoice.status == "POSTED") { "لا يمكن إرجاع فاتورة ملغاة" }
+        val originalLines = database.purchaseInvoices().lines(invoiceId)
+        val returnedLines = lines.map { requested ->
+            require(requested.quantityMilli > 0) { "كمية المرتجع غير صحيحة" }
+            val original = originalLines.firstOrNull { it.id == requested.originalInvoiceItemId }
+                ?: error("الصنف غير موجود في الفاتورة الأصلية")
+            val alreadyQty = database.returns().returnedQuantity(invoiceId, original.id)
+            val remainingQty = Math.subtractExact(original.quantityMilli, alreadyQty)
+            require(requested.quantityMilli <= remainingQty) { "الكمية المرتجعة تتجاوز الكمية المتبقية من الفاتورة" }
+            val rawAmount = MoneyMath.lineTotal(requested.quantityMilli, original.unitCost)
+            val netLineAmount = MoneyMath.proportionalShare(original.lineTotal, invoice.total, invoice.subtotal)
+            val alreadyAmount = database.returns().returnedAmount(invoiceId, original.id)
+            val amount = if (requested.quantityMilli == remainingQty) {
+                Math.subtractExact(netLineAmount, alreadyAmount)
+            } else {
+                MoneyMath.proportionalShare(rawAmount, invoice.total, invoice.subtotal)
+                    .coerceAtMost(Math.subtractExact(netLineAmount, alreadyAmount))
+            }
+            Triple(requested, original, amount)
+        }
+        val total = returnedLines.fold(0L) { sum, row -> Math.addExact(sum, row.third) }
+        val returnId = UUID.randomUUID().toString()
+        database.returns().insert(
+            ReturnEntity(returnId, operationId, "PURCHASE", invoiceId, total, createdAt, note)
+        )
+        database.returns().insertItems(returnedLines.map { (requested, original, amount) ->
+            ReturnItemEntity(
+                id = UUID.randomUUID().toString(),
+                returnId = returnId,
+                originalInvoiceItemId = original.id,
+                itemId = original.itemId,
+                quantityMilli = requested.quantityMilli,
+                amount = amount
+            )
+        })
+        returnedLines.forEachIndexed { index, (requested, original, _) ->
+            val item = database.items().findById(original.itemId) ?: error("الصنف المرتجع غير موجود")
+            val before = item.quantityMilli
+            require(before >= requested.quantityMilli) { "المخزون الحالي لا يكفي لإرجاع الصنف للمورد" }
+            val after = Math.subtractExact(before, requested.quantityMilli)
+            check(database.items().setQuantity(item.id, after, createdAt) == 1)
+            database.stock().insertMovement(
+                StockMovementEntity(
+                    id = UUID.randomUUID().toString(),
+                    operationId = "$operationId:stock:$index",
+                    itemId = item.id,
+                    movementType = "PURCHASE_RETURN",
+                    quantityInMilli = 0,
+                    quantityOutMilli = requested.quantityMilli,
+                    balanceBeforeMilli = before,
+                    balanceAfterMilli = after,
+                    sourceType = "PURCHASE_RETURN",
+                    sourceId = returnId,
+                    note = note,
+                    createdAt = createdAt
+                )
+            )
+        }
+        val supplierId = invoice.supplierId
+        val debtReduction = if (supplierId != null) {
+            val supplier = database.suppliers().findById(supplierId) ?: error("المورد المرتبط غير موجود")
+            val reduction = minOf(supplier.balance, total)
+            val newBalance = MoneyMath.reduceBalance(supplier.balance, reduction)
+            database.ledger().insertSupplier(
+                SupplierTransactionEntity(
+                    UUID.randomUUID().toString(), "$operationId:supplier",
+                    supplierId, "RETURN", total, newBalance, "PURCHASE_RETURN", returnId, note, createdAt
+                )
+            )
+            check(database.suppliers().setBalance(supplierId, newBalance, createdAt) == 1)
+            reduction
+        } else 0L
+        val cashReceived = Math.subtractExact(total, debtReduction)
+        if (cashReceived > 0) {
+            database.cash().insert(
+                CashTransactionEntity(
+                    UUID.randomUUID().toString(), "$operationId:cash", "IN", cashReceived,
+                    "PURCHASE_RETURN", returnId, "CASH", note, createdAt
+                )
+            )
+        }
+        database.references().insertActivity(
+            ActivityLogEntity(UUID.randomUUID().toString(), null, "PURCHASE_RETURN", "RETURN", returnId, "مرتجع مشتريات بقيمة $total", createdAt)
+        )
+        SaveReturnResult(returnId, total, false)
     }
 
 }
