@@ -54,6 +54,9 @@ class GroceryBackupManagerTest {
 
         assertNull(database.customers().findById("temporary"))
         assertNotNull(restored.preRestoreFile)
+        val preRestore = File(restored.preRestoreFile!!)
+        assertEquals(true, preRestore.exists())
+        assertEquals(false, preRestore.readText().contains("سجل مؤقت"))
         assertEquals(0, restored.recordCount)
     }
 
