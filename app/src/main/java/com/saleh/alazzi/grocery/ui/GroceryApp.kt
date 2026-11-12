@@ -110,6 +110,10 @@ fun GroceryApp(viewModel: GroceryViewModel) {
     val items by viewModel.items.collectAsState()
     val lowStock by viewModel.lowStockItems.collectAsState()
     val cash by viewModel.cashBalance.collectAsState()
+    val salesToday by viewModel.salesToday.collectAsState()
+    val purchasesToday by viewModel.purchasesToday.collectAsState()
+    val invoicesToday by viewModel.invoicesToday.collectAsState()
+    val grossProfitToday by viewModel.grossProfitToday.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.events.collect { snackbar.showSnackbar(it) }
@@ -162,6 +166,10 @@ fun GroceryApp(viewModel: GroceryViewModel) {
                     itemCount = items.size,
                     lowStockCount = lowStock.size,
                     cashBalance = cash,
+                    salesToday = salesToday,
+                    purchasesToday = purchasesToday,
+                    invoicesToday = invoicesToday,
+                    grossProfitToday = grossProfitToday,
                     onNavigate = { nav.navigate(it) }
                 )
             }
@@ -192,6 +200,10 @@ private fun HomeScreen(
     itemCount: Int,
     lowStockCount: Int,
     cashBalance: Long,
+    salesToday: Long,
+    purchasesToday: Long,
+    invoicesToday: Long,
+    grossProfitToday: Long,
     onNavigate: (String) -> Unit
 ) {
     LazyColumn(
@@ -206,8 +218,20 @@ private fun HomeScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricCard("مبيعات اليوم", salesToday.toString(), Color(0xFF155E9B), Modifier.weight(1f))
+                MetricCard("مشتريات اليوم", purchasesToday.toString(), Color(0xFF155E9B), Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetricCard("رصيد الصندوق", cashBalance.toString(), Color(0xFF155E9B), Modifier.weight(1f))
                 MetricCard("أصناف المخزون", itemCount.toString(), Color(0xFF16804A), Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricCard("الربح الإجمالي اليوم", grossProfitToday.toString(), if (grossProfitToday >= 0) Color(0xFF16804A) else Color(0xFFB42318), Modifier.weight(1f))
+                MetricCard("فواتير البيع", invoicesToday.toString(), Color(0xFF155E9B), Modifier.weight(1f))
             }
         }
         item {
@@ -811,7 +835,7 @@ private fun ReportsScreen(
 ) {
     val customerDebt = customers.sumOf { it.balance }
     val supplierDue = suppliers.sumOf { it.balance }
-    val stockValue = items.sumOf { item -> item.quantityMilli / 1000L * item.purchasePrice }
+    val stockValue = items.sumOf { item -> runCatching { MoneyMath.lineTotal(item.quantityMilli, item.purchasePrice) }.getOrDefault(0L) }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("ملخص الحسابات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item { ReportRow("رصيد الصندوق", cash) }
