@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.saleh.alazzi.grocery.data.local.GroceryDatabase
 import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
+import com.saleh.alazzi.grocery.data.local.entity.ExpenseEntity
 import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
 import com.saleh.alazzi.grocery.data.local.entity.SupplierEntity
 import kotlinx.coroutines.flow.first
@@ -170,6 +171,61 @@ class GroceryRepositoryDatabaseTest {
         assertEquals(80L, database.suppliers().findById("supplier-1")!!.balance)
     }
 
+
+    @Test
+    fun dailyReportAggregatesSalesReturnsPurchaseReturnsAndExpenses() = runBlocking {
+        val sale = repository.createSale(
+            CreateInvoiceInput(
+                operationId = "report-sale",
+                customerOrSupplierId = "customer-1",
+                lines = listOf(InvoiceLineInput("item-1", 1_000, 100)),
+                paid = 100,
+                paymentMethod = "CASH",
+                createdAt = now
+            )
+        )
+        val saleLine = database.salesInvoices().lines(sale.invoiceId).single()
+        repository.returnSale(
+            operationId = "report-sale-return",
+            invoiceId = sale.invoiceId,
+            lines = listOf(ReturnLineInput(saleLine.id, 1_000)),
+            createdAt = now + 1
+        )
+
+        val purchase = repository.createPurchase(
+            CreateInvoiceInput(
+                operationId = "report-purchase",
+                customerOrSupplierId = "supplier-1",
+                lines = listOf(InvoiceLineInput("item-1", 1_000, 80)),
+                paid = 80,
+                paymentMethod = "CASH",
+                createdAt = now
+            )
+        )
+        val purchaseLine = database.purchaseInvoices().lines(purchase.invoiceId).single()
+        repository.returnPurchase(
+            operationId = "report-purchase-return",
+            invoiceId = purchase.invoiceId,
+            lines = listOf(ReturnLineInput(purchaseLine.id, 1_000)),
+            createdAt = now + 1
+        )
+        repository.recordExpense(
+            operationId = "report-expense",
+            category = "تشغيل",
+            amount = 25,
+            paymentMethod = "CASH",
+            description = "مصروف اختبار",
+            createdAt = now + 2
+        )
+
+        val from = now - 1
+        val to = now + 10
+        assertEquals(100L, database.salesInvoices().observeSalesTotal(from, to).first())
+        assertEquals(100L, database.returns().observeSalesReturnsTotal(from, to).first())
+        assertEquals(80L, database.purchaseInvoices().observePurchaseTotal(from, to).first())
+        assertEquals(80L, database.returns().observePurchaseReturnsTotal(from, to).first())
+        assertEquals(25L, database.expenses().observeTotal(from, to).first())
+    }
 
     @Test
     fun stockAdjustmentCreatesAuditMovementAndIsIdempotent() = runBlocking {
