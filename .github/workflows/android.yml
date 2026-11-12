@@ -45,10 +45,15 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug
 
+      - name: Calculate APK SHA-256
+        run: sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v5
         with:
           name: Al-Azzi-Grocery-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
           if-no-files-found: error
           retention-days: 14
