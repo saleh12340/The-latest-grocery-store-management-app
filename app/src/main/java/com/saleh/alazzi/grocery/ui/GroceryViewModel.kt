@@ -356,6 +356,14 @@ class GroceryViewModel(
         }
     }
 
+    fun adjustStock(itemId: String, newQuantityMilli: Long, note: String, operationId: String) {
+        viewModelScope.launch {
+            runCatching { repository.adjustStock(operationId, itemId, newQuantityMilli, note) }
+                .onSuccess { eventChannel.send("تمت تسوية المخزون وتسجيل الحركة") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر تعديل المخزون")) }
+        }
+    }
+
     fun customerTransactions(customerId: String) = database.ledger().observeCustomer(customerId)
     fun supplierTransactions(supplierId: String) = database.ledger().observeSupplier(supplierId)
 
