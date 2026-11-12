@@ -236,6 +236,14 @@ class GroceryRepositoryDatabaseTest {
         assertEquals(80L, database.purchaseInvoices().observePurchaseTotal(from, to).first())
         assertEquals(80L, database.returns().observePurchaseReturnsTotal(from, to).first())
         assertEquals(25L, database.expenses().observeTotal(from, to).first())
+
+        val summary = database.salesInvoices().observeFinancialSummary(from, to).first()
+        assertEquals(100L, summary.sales)
+        assertEquals(80L, summary.purchases)
+        assertEquals(100L, summary.salesReturns)
+        assertEquals(80L, summary.purchaseReturns)
+        assertEquals(25L, summary.expenses)
+        assertEquals(1L, summary.salesInvoices)
     }
 
     @Test
