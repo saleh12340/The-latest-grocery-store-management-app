@@ -35,7 +35,8 @@ class GroceryRepository(private val database: GroceryDatabase) {
         database.withTransaction {
             require(input.operationId.isNotBlank()) { "معرف العملية مطلوب" }
             require(input.lines.isNotEmpty()) { "أضف صنفاً واحداً على الأقل" }
-            require(input.paid >= 0) { "المبلغ المدفوع غير صحيح" }
+            require(input.lines.map { it.itemId }.distinct().size == input.lines.size) { "ادمج الكميات المكررة للصنف نفسه قبل الحفظ" }
+            require(input.paid >= 0 } { "المبلغ المدفوع غير صحيح" }
 
             val invoiceDao = database.salesInvoices()
             invoiceDao.findByOperationId(input.operationId)?.let {
@@ -182,7 +183,8 @@ class GroceryRepository(private val database: GroceryDatabase) {
         database.withTransaction {
             require(input.operationId.isNotBlank()) { "معرف العملية مطلوب" }
             require(input.lines.isNotEmpty()) { "أضف صنفاً واحداً على الأقل" }
-            require(input.paid >= 0) { "المبلغ المدفوع غير صحيح" }
+            require(input.lines.map { it.itemId }.distinct().size == input.lines.size) { "ادمج الكميات المكررة للصنف نفسه قبل الحفظ" }
+            require(input.paid >= 0 } { "المبلغ المدفوع غير صحيح" }
 
             val invoiceDao = database.purchaseInvoices()
             invoiceDao.findByOperationId(input.operationId)?.let {
