@@ -1,5 +1,6 @@
 package com.saleh.alazzi.grocery.ui
 
+import androidx.room.withTransaction
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.saleh.alazzi.grocery.data.local.GroceryDatabase
@@ -121,29 +122,50 @@ class GroceryViewModel(
     fun addItem(name: String, barcode: String, quantity: String, purchasePrice: String, salePrice: String) {
         viewModelScope.launch {
             runCatching {
-                val cleanName = name.trim()
-                require(cleanName.isNotEmpty()) { "اكتب اسم الصنف" }
-                val cleanBarcode = barcode.trim().ifBlank { null }
-                require(database.items().duplicateCount(cleanName, cleanBarcode) == 0) { "الصنف أو الباركود مسجل مسبقاً" }
-                val now = System.currentTimeMillis()
-                val quantityMilli = (quantity.toBigDecimalOrNull() ?: error("الكمية غير صحيحة"))
-                    .multiply(java.math.BigDecimal("1000")).longValueExact()
-                val buy = purchasePrice.toLongOrNull() ?: error("سعر الشراء غير صحيح")
-                val sell = salePrice.toLongOrNull() ?: error("سعر البيع غير صحيح")
-                require(quantityMilli >= 0 && buy >= 0 && sell >= 0) { "لا تقبل القيم السالبة" }
-                database.items().insert(
-                    ItemEntity(
-                        id = UUID.randomUUID().toString(),
-                        name = cleanName,
-                        barcode = cleanBarcode,
-                        quantityMilli = quantityMilli,
-                        purchasePrice = buy,
-                        salePrice = sell,
-                        createdAt = now,
-                        updatedAt = now
+                database.withTransaction {
+                    val cleanName = name.trim()
+                    require(cleanName.isNotEmpty()) { "اكتب اسم الصنف" }
+                    val cleanBarcode = barcode.trim().ifBlank { null }
+                    require(database.items().duplicateCount(cleanName, cleanBarcode) == 0) { "الصنف أو الباركود مسجل مسبقاً" }
+                    val now = System.currentTimeMillis()
+                    val quantityMilli = (quantity.toBigDecimalOrNull() ?: error("الكمية غير صحيحة"))
+                        .multiply(java.math.BigDecimal("1000")).longValueExact()
+                    val buy = purchasePrice.toLongOrNull() ?: error("سعر الشراء غير صحيح")
+                    val sell = salePrice.toLongOrNull() ?: error("سعر البيع غير صحيح")
+                    require(quantityMilli >= 0 && buy >= 0 && sell >= 0) { "لا تقبل القيم السالبة" }
+                    val itemId = UUID.randomUUID().toString()
+                    database.items().insert(
+                        ItemEntity(
+                            id = itemId,
+                            name = cleanName,
+                            barcode = cleanBarcode,
+                            quantityMilli = quantityMilli,
+                            purchasePrice = buy,
+                            salePrice = sell,
+                            createdAt = now,
+                            updatedAt = now
+                        )
                     )
-                )
-            }.onSuccess { eventChannel.send("تمت إضافة الصنف") }
+                    if (quantityMilli > 0) {
+                        database.stock().insertMovement(
+                            com.saleh.alazzi.grocery.data.local.entity.StockMovementEntity(
+                                id = UUID.randomUUID().toString(),
+                                operationId = "opening:$itemId",
+                                itemId = itemId,
+                                movementType = "OPENING",
+                                quantityInMilli = quantityMilli,
+                                quantityOutMilli = 0,
+                                balanceBeforeMilli = 0,
+                                balanceAfterMilli = quantityMilli,
+                                sourceType = "OPENING_BALANCE",
+                                sourceId = itemId,
+                                note = "رصيد افتتاحي عند إضافة الصنف",
+                                createdAt = now
+                            )
+                        )
+                    }
+                }
+            }.onSuccess { eventChannel.send("تمت إضافة الصنف وتسجيل رصيده الافتتاحي") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر إضافة الصنف")) }
         }
     }
