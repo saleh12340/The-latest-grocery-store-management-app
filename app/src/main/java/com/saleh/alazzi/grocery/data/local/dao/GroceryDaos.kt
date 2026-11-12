@@ -219,4 +219,6 @@ interface ReferenceDao {
     fun observeNotes(): Flow<List<NoteEntity>>
     @Query("SELECT * FROM app_settings WHERE key=:key LIMIT 1")
     suspend fun setting(key: String): AppSettingEntity?
+    @Query("SELECT * FROM app_settings ORDER BY key ASC")
+    fun observeSettings(): Flow<List<AppSettingEntity>>
 }
