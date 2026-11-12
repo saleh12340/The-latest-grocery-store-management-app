@@ -216,7 +216,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
                 SupplierAccountScreen(id, suppliers.firstOrNull { it.id == id }, viewModel)
             }
             composable(Routes.INVENTORY) { if (session?.role == "MANAGER") InventoryScreen(items, lowStock.map { it.id }.toSet(), viewModel) else EmptyState("غير مصرح", "هذه الشاشة للمدير فقط") }
-            composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, viewModel) }
+            composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, storeSettings, viewModel) }
             composable(Routes.INVOICES) {
                 InvoiceHubScreen(
                     isManager = session?.role == "MANAGER",
@@ -233,7 +233,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
                 PurchaseInvoiceDetailScreen(entry.arguments?.getString("invoiceId").orEmpty(), viewModel) { nav.popBackStack() }
             }
 
-            composable(Routes.PURCHASE) { if (session?.role == "MANAGER") InvoiceEntryScreen(false, items, customers, suppliers, viewModel) else EmptyState("غير مصرح", "المشتريات للمدير فقط") }
+            composable(Routes.PURCHASE) { if (session?.role == "MANAGER") InvoiceEntryScreen(false, items, customers, suppliers, storeSettings, viewModel) else EmptyState("غير مصرح", "المشتريات للمدير فقط") }
             composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock, salesToday, purchasesToday, grossProfitToday, invoicesToday, salesReturnsToday, purchaseReturnsToday, expensesToday) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
             composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
             composable(Routes.PRINTER) { PrinterScreen() }
@@ -547,10 +547,12 @@ private fun InvoiceEntryScreen(
     items: List<ItemEntity>,
     customers: List<CustomerEntity>,
     suppliers: List<SupplierEntity>,
+    storeSettings: List<com.saleh.alazzi.grocery.data.local.entity.AppSettingEntity>,
     viewModel: GroceryViewModel
 ) {
     val context = LocalContext.current
     val exporter = remember(context) { InvoiceExporter(context) }
+    val storeProfile = storeSettings.associate { it.key to it.value }
     var selectedItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var itemQuery by rememberSaveable { mutableStateOf("") }
     var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -718,6 +720,7 @@ private fun InvoiceEntryScreen(
                     }
                     pendingPhone = partyPhone
                     pendingReceipt = ReceiptData(
+                        storeName = storeProfile["store_name"] ?: "بقالة العزي للمواد الغذائية",
                         invoiceType = if (isSale) "فاتورة بيع" else "فاتورة شراء",
                         invoiceNumber = result.invoiceNumber,
                         dateTime = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale("ar")).format(java.util.Date()),
@@ -735,7 +738,10 @@ private fun InvoiceEntryScreen(
                         total = total,
                         paid = paidNow,
                         remaining = remainingNow,
-                        accountBalance = cumulative
+                        accountBalance = cumulative,
+                        storePhone = storeProfile["store_phone"],
+                        storeAddress = storeProfile["store_address"],
+                        footer = storeProfile["receipt_footer"]
                     )
                     receiptMessage = ""
                 }
