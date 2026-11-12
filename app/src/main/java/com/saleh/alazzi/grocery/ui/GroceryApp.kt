@@ -99,6 +99,8 @@ private object Routes {
     const val REPORTS = "reports"
     const val NOTES = "notes"
     const val PRINTER = "printer"
+    const val EXPENSES = "expenses"
+    const val TRANSFERS = "transfers"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -114,6 +116,8 @@ fun GroceryApp(viewModel: GroceryViewModel) {
     val purchasesToday by viewModel.purchasesToday.collectAsState()
     val invoicesToday by viewModel.invoicesToday.collectAsState()
     val grossProfitToday by viewModel.grossProfitToday.collectAsState()
+    val expenses by viewModel.expenses.collectAsState()
+    val transfers by viewModel.transfers.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.events.collect { snackbar.showSnackbar(it) }
@@ -189,6 +193,8 @@ fun GroceryApp(viewModel: GroceryViewModel) {
             composable(Routes.REPORTS) { ReportsScreen(cash, customers, suppliers, items, lowStock) }
             composable(Routes.NOTES) { SimpleInfoScreen("دفتر الملاحظات", "سيتم ربط إدارة الملاحظات بقاعدة البيانات في المرحلة التالية.") }
             composable(Routes.PRINTER) { PrinterScreen() }
+            composable(Routes.EXPENSES) { ExpensesScreen(expenses, viewModel) }
+            composable(Routes.TRANSFERS) { TransfersScreen(transfers, viewModel) }
         }
     }
 }
@@ -269,6 +275,12 @@ private fun HomeScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionCard("التقارير", Icons.Default.Assessment, Modifier.weight(1f)) { onNavigate(Routes.REPORTS) }
                 ActionCard("الملاحظات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.NOTES) }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionCard("المصروفات", Icons.Default.AccountBalance, Modifier.weight(1f)) { onNavigate(Routes.EXPENSES) }
+                ActionCard("الحوالات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.TRANSFERS) }
             }
         }
         item { ActionCard("الطباعة الحرارية", Icons.Default.ReceiptLong, Modifier.fillMaxWidth()) { onNavigate(Routes.PRINTER) } }
@@ -822,6 +834,124 @@ private fun PrinterScreen() {
                 }
             }
         ) { Text("طباعة إيصال اختبار") }
+    }
+}
+
+
+@Composable
+private fun ExpensesScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.ExpenseEntity>, viewModel: GroceryViewModel) {
+    var showAdd by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("المصروفات", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Button(onClick = { showAdd = true }) { Icon(Icons.Default.Add, null); Text("مصروف") }
+        }
+        if (values.isEmpty()) EmptyState("لا توجد مصروفات", "سجّل المصروفات لمتابعة حركة الصندوق")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { expense ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row {
+                            Text(expense.category, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text("-\${expense.amount}", color = Color(0xFFB42318))
+                        }
+                        Text(expense.description ?: "بدون وصف", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+    if (showAdd) {
+        var category by remember { mutableStateOf("") }
+        var amount by remember { mutableStateOf("") }
+        var description by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("تسجيل مصروف") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(category, { category = it }, label = { Text("نوع المصروف") }, singleLine = true)
+                    OutlinedTextField(amount, { amount = it }, label = { Text("المبلغ") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    OutlinedTextField(description, { description = it }, label = { Text("الوصف") })
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val value = amount.toLongOrNull()
+                    if (value != null && value > 0 && category.isNotBlank()) {
+                        viewModel.recordExpense(category, value, description)
+                        showAdd = false
+                    }
+                }) { Text("حفظ المصروف") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("إلغاء") } }
+        )
+    }
+}
+
+@Composable
+private fun TransfersScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.TransferEntity>, viewModel: GroceryViewModel) {
+    var showAdd by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("الحوالات", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Button(onClick = { showAdd = true }) { Icon(Icons.Default.Add, null); Text("حوالة") }
+        }
+        if (values.isEmpty()) EmptyState("لا توجد حوالات", "ستظهر الحوالات المسجلة هنا")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { transfer ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row {
+                            Text(transfer.recipientName, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(transfer.amount.toString())
+                        }
+                        Text(transfer.phone)
+                        Text("الرسوم: \${transfer.fees}   الصافي: \${transfer.netAmount}")
+                        Text(if (transfer.direction == "OUT") "صادرة" else "واردة", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+    if (showAdd) {
+        var recipient by remember { mutableStateOf("") }
+        var phone by remember { mutableStateOf("") }
+        var amount by remember { mutableStateOf("") }
+        var fees by remember { mutableStateOf("0") }
+        var note by remember { mutableStateOf("") }
+        var direction by remember { mutableStateOf("OUT") }
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("تسجيل حوالة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(recipient, { recipient = it }, label = { Text("اسم المستلم") }, singleLine = true)
+                    OutlinedTextField(phone, { phone = it }, label = { Text("رقم الهاتف") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(onClick = { direction = "OUT" }) { Text(if (direction == "OUT") "✓ صادرة" else "صادرة") }
+                        FilledTonalButton(onClick = { direction = "IN" }) { Text(if (direction == "IN") "✓ واردة" else "واردة") }
+                    }
+                    OutlinedTextField(amount, { amount = it }, label = { Text("المبلغ") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    OutlinedTextField(fees, { fees = it }, label = { Text("الرسوم") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                    OutlinedTextField(note, { note = it }, label = { Text("ملاحظات") })
+                    val a = amount.toLongOrNull() ?: 0L
+                    val f = fees.toLongOrNull() ?: 0L
+                    Text("الصافي / حركة الصندوق: \${if (direction == "OUT") a + f else a - f}")
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val a = amount.toLongOrNull()
+                    val f = fees.toLongOrNull()
+                    if (recipient.isNotBlank() && a != null && f != null && a > 0 && f >= 0) {
+                        viewModel.recordTransfer(recipient, phone, a, f, direction, note)
+                        showAdd = false
+                    }
+                }) { Text("حفظ الحوالة") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("إلغاء") } }
+        )
     }
 }
 
