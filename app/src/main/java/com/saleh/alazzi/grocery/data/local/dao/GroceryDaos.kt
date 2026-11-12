@@ -10,6 +10,8 @@ import com.saleh.alazzi.grocery.data.local.entity.*
 @Dao
 interface CustomerDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(value: CustomerEntity)
+    @Query("SELECT COUNT(*) FROM customers WHERE (phone IS NOT NULL AND phone=:phone) OR (phone IS NULL AND :phone IS NULL AND name=:name COLLATE NOCASE)")
+    suspend fun duplicateCount(name: String, phone: String?): Int
     @Query("UPDATE customers SET name=:name, phone=:phone, address=:address, notes=:notes, updatedAt=:now WHERE id=:id")
     suspend fun updateProfile(id: String, name: String, phone: String?, address: String?, notes: String?, now: Long): Int
     @Query("SELECT * FROM customers ORDER BY createdAt DESC, name COLLATE NOCASE ASC")
@@ -25,6 +27,8 @@ interface CustomerDao {
 @Dao
 interface SupplierDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(value: SupplierEntity)
+    @Query("SELECT COUNT(*) FROM suppliers WHERE (phone IS NOT NULL AND phone=:phone) OR (phone IS NULL AND :phone IS NULL AND name=:name COLLATE NOCASE)")
+    suspend fun duplicateCount(name: String, phone: String?): Int
     @Query("SELECT * FROM suppliers ORDER BY createdAt DESC, name COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<SupplierEntity>>
     @Query("SELECT * FROM suppliers WHERE id=:id LIMIT 1")
@@ -38,6 +42,8 @@ interface SupplierDao {
 @Dao
 interface ItemDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(value: ItemEntity)
+    @Query("SELECT COUNT(*) FROM items WHERE name=:name COLLATE NOCASE OR (barcode IS NOT NULL AND barcode=:barcode)")
+    suspend fun duplicateCount(name: String, barcode: String?): Int
     @Query("SELECT * FROM items WHERE isActive=1 ORDER BY createdAt DESC, name COLLATE NOCASE ASC")
     fun observeActive(): Flow<List<ItemEntity>>
     @Query("SELECT * FROM items WHERE id=:id LIMIT 1")
