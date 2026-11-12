@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
+import com.saleh.alazzi.grocery.printing.InvoiceExporter
 import com.saleh.alazzi.grocery.printing.BluetoothPrinterClient
 import com.saleh.alazzi.grocery.printing.PairedPrinter
 import com.saleh.alazzi.grocery.printing.ReceiptData
@@ -400,6 +401,8 @@ private fun InvoiceEntryScreen(
     suppliers: List<SupplierEntity>,
     viewModel: GroceryViewModel
 ) {
+    val context = LocalContext.current
+    val exporter = remember(context) { InvoiceExporter(context) }
     var selectedItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var quantity by rememberSaveable { mutableStateOf("1") }
@@ -408,6 +411,10 @@ private fun InvoiceEntryScreen(
     var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
     var saving by remember { mutableStateOf(false) }
     var accountMenu by remember { mutableStateOf(false) }
+    var pendingReceipt by remember { mutableStateOf<ReceiptData?>(null) }
+    var pendingPhone by remember { mutableStateOf<String?>(null) }
+    var receiptMessage by remember { mutableStateOf("") }
+
     val selectedItem = items.firstOrNull { it.id == selectedItemId }
     val accounts = if (isSale) customers.map { it.id to it.name } else suppliers.map { it.id to it.name }
     val selectedAccountName = accounts.firstOrNull { it.first == selectedAccountId }?.second
@@ -453,12 +460,12 @@ private fun InvoiceEntryScreen(
             }
         }
         if (selectedItem != null) {
-            Text("الصنف المحدد: ${selectedItem.name}", fontWeight = FontWeight.Bold)
+            Text("الصنف المحدد: \${selectedItem.name}", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(quantity, { quantity = it }, modifier = Modifier.weight(1f), label = { Text("الكمية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 OutlinedTextField(unitPrice, { unitPrice = it }, modifier = Modifier.weight(1f), label = { Text("سعر الوحدة") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             }
-            Text("الإجمالي: ${lineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("الإجمالي: \${lineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             OutlinedTextField(paid, { paid = it }, modifier = Modifier.fillMaxWidth(), label = { Text("المبلغ المدفوع") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         }
         Button(
@@ -470,6 +477,9 @@ private fun InvoiceEntryScreen(
                 val paidValue = paid.toLongOrNull()
                 if (item != null && qty != null && price != null && total != null && paidValue != null && !saving) {
                     saving = true
+                    val partyPhone = if (isSale) customers.firstOrNull { it.id == selectedAccountId }?.phone
+                        else suppliers.firstOrNull { it.id == selectedAccountId }?.phone
+                    val partyName = selectedAccountName
                     val request = CreateInvoiceInput(
                         operationId = operationId,
                         customerOrSupplierId = selectedAccountId,
@@ -487,12 +497,98 @@ private fun InvoiceEntryScreen(
                             paid = "0"
                         }
                     }
-                    if (isSale) viewModel.createSale(request, finish) else viewModel.createPurchase(request, finish)
+                    val saved: (com.saleh.alazzi.grocery.data.repository.SaveInvoiceResult) -> Unit = { result ->
+                        val remaining = total - paidValue
+                        val cumulative = if (selectedAccountId == null) null else {
+                            val previous = if (isSale) customers.firstOrNull { it.id == selectedAccountId }?.balance
+                                else suppliers.firstOrNull { it.id == selectedAccountId }?.balance
+                            (previous ?: 0L) + remaining
+                        }
+                        pendingPhone = partyPhone
+                        pendingReceipt = ReceiptData(
+                            invoiceType = if (isSale) "فاتورة بيع" else "فاتورة شراء",
+                            invoiceNumber = result.invoiceNumber,
+                            dateTime = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale("ar")).format(java.util.Date()),
+                            partyName = partyName,
+                            items = listOf(
+                                ReceiptItem(
+                                    name = item.name,
+                                    quantity = BigDecimal.valueOf(qty, 3).stripTrailingZeros().toPlainString(),
+                                    unitPrice = price,
+                                    total = total
+                                )
+                            ),
+                            subtotal = total,
+                            discount = 0,
+                            total = total,
+                            paid = paidValue,
+                            remaining = remaining,
+                            accountBalance = cumulative
+                        )
+                        receiptMessage = ""
+                    }
+                    if (isSale) viewModel.createSale(request, finish, saved)
+                    else viewModel.createPurchase(request, finish, saved)
                 }
             },
             enabled = selectedItem != null && lineTotal != null && paid.toLongOrNull() != null && !saving,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (saving) "جارٍ الحفظ..." else "حفظ الفاتورة") }
+    }
+
+    pendingReceipt?.let { receipt ->
+        AlertDialog(
+            onDismissRequest = { pendingReceipt = null },
+            title = { Text("تم حفظ الفاتورة رقم \${receipt.invoiceNumber}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("يمكنك حفظ صورة أو PDF أو مشاركة نسخة الفاتورة.")
+                    if (receiptMessage.isNotBlank()) Text(receiptMessage, color = MaterialTheme.colorScheme.primary)
+                    TextButton(onClick = {
+                        runCatching {
+                            val bitmap = ReceiptRenderer.render(receipt, 384)
+                            try { exporter.savePng(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                        }.onSuccess { receiptMessage = "تم حفظ صورة الفاتورة" }
+                            .onFailure { receiptMessage = it.message ?: "تعذر حفظ الصورة" }
+                    }) { Text("حفظ صورة الفاتورة") }
+                    TextButton(onClick = {
+                        runCatching {
+                            val bitmap = ReceiptRenderer.render(receipt, 576)
+                            try { exporter.savePdf(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                        }.onSuccess { receiptMessage = "تم حفظ ملف PDF" }
+                            .onFailure { receiptMessage = it.message ?: "تعذر إنشاء PDF" }
+                    }) { Text("حفظ PDF") }
+                    TextButton(onClick = {
+                        runCatching {
+                            val bitmap = ReceiptRenderer.render(receipt, 576)
+                            val uri = try { exporter.savePng(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            exporter.share(uri, "image/png")
+                        }.onFailure { receiptMessage = it.message ?: "تعذرت المشاركة" }
+                    }) { Text("مشاركة صورة الفاتورة") }
+                    TextButton(onClick = {
+                        runCatching {
+                            val bitmap = ReceiptRenderer.render(receipt, 576)
+                            val uri = try { exporter.savePdf(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            exporter.share(uri, "application/pdf")
+                        }.onFailure { receiptMessage = it.message ?: "تعذرت مشاركة PDF" }
+                    }) { Text("مشاركة PDF") }
+                    TextButton(onClick = {
+                        runCatching {
+                            val bitmap = ReceiptRenderer.render(receipt, 576)
+                            val uri = try { exporter.savePng(bitmap, "Invoice_\${receipt.invoiceNumber}") } finally { bitmap.recycle() }
+                            exporter.shareToWhatsApp(uri, "image/png")
+                        }.onFailure { receiptMessage = it.message ?: "تعذر فتح WhatsApp أو مشاركة الفاتورة" }
+                    }) { Text("مشاركة عبر WhatsApp") }
+                    if (!pendingPhone.isNullOrBlank()) {
+                        TextButton(onClick = {
+                            runCatching { exporter.openWhatsAppChat(pendingPhone.orEmpty()) }
+                                .onFailure { receiptMessage = it.message ?: "تعذر فتح محادثة WhatsApp" }
+                        }) { Text("فتح محادثة العميل في WhatsApp") }
+                    }
+                }
+            },
+            confirmButton = { Button(onClick = { pendingReceipt = null }) { Text("إغلاق") } }
+        )
     }
 }
 
