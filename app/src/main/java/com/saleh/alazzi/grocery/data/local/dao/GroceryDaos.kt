@@ -165,6 +165,9 @@ interface ReferenceDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertBackup(value: BackupHistoryEntity)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertReturn(value: ReturnEntity)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertReturnItems(values: List<ReturnItemEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun updateNote(value: NoteEntity)
+    @Query("DELETE FROM notes WHERE id=:id")
+    suspend fun deleteNote(id: String): Int
     @Query("SELECT * FROM notes ORDER BY isPinned DESC, updatedAt DESC")
     fun observeNotes(): Flow<List<NoteEntity>>
     @Query("SELECT * FROM app_settings WHERE key=:key LIMIT 1")
