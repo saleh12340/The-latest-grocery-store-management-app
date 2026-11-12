@@ -55,4 +55,12 @@ object MoneyMath {
             .divide(quantity).longValueExact()
     }
 
+    fun proportionalShare(rawAmount: Long, totalAfterDiscount: Long, originalSubtotal: Long): Long {
+        require(rawAmount >= 0 && totalAfterDiscount >= 0 && originalSubtotal >= 0)
+        if (originalSubtotal == 0L) return 0L
+        val numerator = BigInteger.valueOf(rawAmount).multiply(BigInteger.valueOf(totalAfterDiscount))
+        val denominator = BigInteger.valueOf(originalSubtotal)
+        return numerator.add(denominator.divide(BigInteger.TWO)).divide(denominator).longValueExact()
+    }
+
 }
