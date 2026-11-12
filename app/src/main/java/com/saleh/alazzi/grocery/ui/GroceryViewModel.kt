@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.Calendar
@@ -93,36 +93,15 @@ class GroceryViewModel(
 
     val reportSummary = _reportPeriod.flatMapLatest { period ->
         val (from, to) = reportRange(period)
-        val salesAndPurchases = combine(
-            database.salesInvoices().observeSalesTotal(from, to),
-            database.purchaseInvoices().observePurchaseTotal(from, to)
-        ) { sales, purchases -> sales to purchases }
-        val profitAndCount = combine(
-            database.salesInvoices().observeGrossProfit(from, to),
-            database.salesInvoices().observeSalesCount(from, to)
-        ) { profit, count -> profit to count }
-        val returns = combine(
-            database.returns().observeSalesReturnsTotal(from, to),
-            database.returns().observePurchaseReturnsTotal(from, to)
-        ) { salesReturns, purchaseReturns -> salesReturns to purchaseReturns }
-        val returnsAndExpenses = combine(
-            returns,
-            database.expenses().observeTotal(from, to)
-        ) { returnTotals, expenses -> returnTotals to expenses }
-
-        combine(salesAndPurchases, profitAndCount) { salesPurchases, profitCount ->
-            salesPurchases to profitCount
-        }.combine(returnsAndExpenses) { salesProfit, returnExpense ->
-            val (salesPurchases, profitCount) = salesProfit
-            val (returnTotals, expenses) = returnExpense
+        database.salesInvoices().observeFinancialSummary(from, to).map { row ->
             ReportSummary(
-                sales = salesPurchases.first,
-                purchases = salesPurchases.second,
-                grossProfit = profitCount.first,
-                salesInvoices = profitCount.second,
-                salesReturns = returnTotals.first,
-                purchaseReturns = returnTotals.second,
-                expenses = expenses
+                sales = row.sales,
+                purchases = row.purchases,
+                grossProfit = row.grossProfit,
+                salesInvoices = row.salesInvoices,
+                salesReturns = row.salesReturns,
+                purchaseReturns = row.purchaseReturns,
+                expenses = row.expenses
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportSummary())
