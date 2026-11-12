@@ -53,18 +53,18 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: gradle connectedDebugAndroidTest
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      - name: Build optimized release APK
+        run: gradle assembleRelease
 
-      - name: Calculate APK SHA-256
-        run: sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+      - name: Calculate optimized APK SHA-256
+        run: sha256sum app/build/outputs/apk/release/app-release.apk | tee app/build/outputs/apk/release/app-release.apk.sha256
 
-      - name: Upload debug APK
+      - name: Upload optimized release APK
         uses: actions/upload-artifact@v5
         with:
-          name: Al-Azzi-Grocery-debug-apk
+          name: Al-Azzi-Grocery-optimized-release-apk
           path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/debug/app-debug.apk.sha256
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/app-release.apk.sha256
           if-no-files-found: error
           retention-days: 14
