@@ -21,9 +21,27 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.Calendar
+
+enum class ReportPeriod(val label: String) {
+    TODAY("اليوم"),
+    WEEK("هذا الأسبوع"),
+    MONTH("هذا الشهر")
+}
+
+data class ReportSummary(
+    val sales: Long = 0,
+    val purchases: Long = 0,
+    val grossProfit: Long = 0,
+    val salesInvoices: Long = 0,
+    val salesReturns: Long = 0,
+    val purchaseReturns: Long = 0,
+    val expenses: Long = 0
+)
 
 class GroceryViewModel(
     private val database: GroceryDatabase,
@@ -75,6 +93,38 @@ class GroceryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
     val expensesToday = database.expenses().observeTotal(todayRange.first, todayRange.second)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+    private val _reportPeriod = MutableStateFlow(ReportPeriod.TODAY)
+    val reportPeriod = _reportPeriod.asStateFlow()
+
+    val reportSummary = _reportPeriod.flatMapLatest { period ->
+        val (from, to) = reportRange(period)
+        combine(
+            arrayOf(
+                database.salesInvoices().observeSalesTotal(from, to),
+                database.purchaseInvoices().observePurchaseTotal(from, to),
+                database.salesInvoices().observeGrossProfit(from, to),
+                database.salesInvoices().observeSalesCount(from, to),
+                database.returns().observeSalesReturnsTotal(from, to),
+                database.returns().observePurchaseReturnsTotal(from, to),
+                database.expenses().observeTotal(from, to)
+            )
+        ) { values ->
+            ReportSummary(
+                sales = values[0],
+                purchases = values[1],
+                grossProfit = values[2],
+                salesInvoices = values[3],
+                salesReturns = values[4],
+                purchaseReturns = values[5],
+                expenses = values[6]
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportSummary())
+
+    fun setReportPeriod(period: ReportPeriod) {
+        _reportPeriod.value = period
+    }
 
 
     private val eventChannel = Channel<String>(Channel.BUFFERED)
@@ -421,6 +471,23 @@ class GroceryViewModel(
 
     fun customerTransactions(customerId: String) = database.ledger().observeCustomer(customerId)
     fun supplierTransactions(supplierId: String) = database.ledger().observeSupplier(supplierId)
+
+    private fun reportRange(period: ReportPeriod): Pair<Long, Long> {
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        when (period) {
+            ReportPeriod.TODAY -> Unit
+            ReportPeriod.WEEK -> {
+                val daysSinceMonday = (calendar.get(Calendar.DAY_OF_WEEK) + 5) % 7
+                calendar.add(Calendar.DAY_OF_MONTH, -daysSinceMonday)
+            }
+            ReportPeriod.MONTH -> calendar.set(Calendar.DAY_OF_MONTH, 1)
+        }
+        return calendar.timeInMillis to (System.currentTimeMillis() + 1L)
+    }
 
     private fun todayRange(): Pair<Long, Long> {
         val calendar = Calendar.getInstance()
