@@ -29,7 +29,10 @@ data class ReceiptData(
     val total: Long,
     val paid: Long,
     val remaining: Long,
-    val accountBalance: Long? = null
+    val accountBalance: Long? = null,
+    val storePhone: String? = null,
+    val storeAddress: String? = null,
+    val footer: String? = null
 )
 
 object ReceiptRenderer {
@@ -43,6 +46,8 @@ object ReceiptRenderer {
         val contentWidth = paperWidthDots - horizontalPadding * 2
         val blocks = buildList {
             add(Block(data.storeName, 30f, true, true))
+            data.storePhone?.takeIf { it.isNotBlank() }?.let { add(Block("الهاتف: $it", 17f, false, true)) }
+            data.storeAddress?.takeIf { it.isNotBlank() }?.let { add(Block(it, 17f, false, true)) }
             add(Block(data.invoiceType, 24f, true, true))
             add(Block("رقم الفاتورة: ${data.invoiceNumber}", 20f, true, false))
             add(Block("التاريخ: ${data.dateTime}", 18f, false, false))
@@ -63,7 +68,7 @@ object ReceiptRenderer {
             add(Block("متبقي الفاتورة: ${data.remaining}", 21f, true, false))
             data.accountBalance?.let { add(Block("الرصيد التراكمي: $it", 18f, true, false)) }
             add(Block("شكراً لتعاملكم معنا", 19f, true, true))
-            add(Block("بقالة العزي", 17f, false, true))
+            data.footer?.takeIf { it.isNotBlank() }?.let { add(Block(it, 17f, false, true)) }
         }
 
         val layouts = blocks.map { block ->
