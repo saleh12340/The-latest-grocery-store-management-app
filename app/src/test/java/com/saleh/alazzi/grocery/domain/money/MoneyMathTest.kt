@@ -30,6 +30,10 @@ class MoneyMathTest {
         }
     }
 
+    @Test fun weightedAverageCostUsesExactIntegerArithmetic() {
+        assertEquals(80L, MoneyMath.weightedAverageCost(1_000, 60, 1_000, 100))
+    }
+
     @Test fun balanceArithmeticIsChecked() {
         assertEquals(1_250L, MoneyMath.addBalance(1_000L, 250L))
         assertThrows(IllegalArgumentException::class.java) {
