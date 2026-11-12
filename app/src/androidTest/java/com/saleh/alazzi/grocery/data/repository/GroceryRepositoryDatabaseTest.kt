@@ -159,4 +159,14 @@ class GroceryRepositoryDatabaseTest {
         assertEquals(80L, database.suppliers().findById("supplier-1")!!.balance)
     }
 
+
+    @Test
+    fun stockAdjustmentCreatesAuditMovementAndIsIdempotent() = runBlocking {
+        repository.adjustStock("adjust-1", "item-1", 7_500, "جرد فعلي", now)
+        repository.adjustStock("adjust-1", "item-1", 9_000, "إعادة محاولة", now + 1)
+
+        assertEquals(7_500L, database.items().findById("item-1")!!.quantityMilli)
+        assertEquals(1, database.stock().observeForItem("item-1").first().size)
+    }
+
 }
