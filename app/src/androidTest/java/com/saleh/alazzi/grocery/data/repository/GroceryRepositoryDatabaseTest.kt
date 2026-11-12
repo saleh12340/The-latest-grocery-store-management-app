@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.saleh.alazzi.grocery.data.local.GroceryDatabase
+import com.saleh.alazzi.grocery.data.local.entity.AppSettingEntity
 import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
 import com.saleh.alazzi.grocery.data.local.entity.ExpenseEntity
 import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
@@ -171,6 +172,16 @@ class GroceryRepositoryDatabaseTest {
         assertEquals(80L, database.suppliers().findById("supplier-1")!!.balance)
     }
 
+
+    @Test
+    fun storeProfileSettingsArePersistedAndObservable() = runBlocking {
+        database.references().putSetting(AppSettingEntity("store_name", "بقالة العزي", now))
+        database.references().putSetting(AppSettingEntity("store_phone", "777000000", now + 1))
+        val values = database.references().observeSettings().first().associate { it.key to it.value }
+
+        assertEquals("بقالة العزي", values["store_name"])
+        assertEquals("777000000", values["store_phone"])
+    }
 
     @Test
     fun dailyReportAggregatesSalesReturnsPurchaseReturnsAndExpenses() = runBlocking {
