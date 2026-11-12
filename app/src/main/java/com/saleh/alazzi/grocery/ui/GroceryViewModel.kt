@@ -67,6 +67,13 @@ class GroceryViewModel(
     val grossProfitToday = database.salesInvoices().observeGrossProfit(todayRange.first, todayRange.second)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
 
+    val salesReturnsToday = database.returns().observeSalesReturnsTotal(todayRange.first, todayRange.second)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    val purchaseReturnsToday = database.returns().observePurchaseReturnsTotal(todayRange.first, todayRange.second)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    val expensesToday = database.expenses().observeTotal(todayRange.first, todayRange.second)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
 
     private val eventChannel = Channel<String>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
