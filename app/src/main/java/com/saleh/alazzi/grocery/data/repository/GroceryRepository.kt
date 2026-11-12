@@ -712,4 +712,43 @@ class GroceryRepository(private val database: GroceryDatabase) {
         SaveReturnResult(returnId, total, false)
     }
 
+
+    suspend fun adjustStock(
+        operationId: String,
+        itemId: String,
+        newQuantityMilli: Long,
+        note: String,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank() && newQuantityMilli >= 0 && note.isNotBlank()) {
+            "أدخل الكمية الجديدة وسبب التسوية"
+        }
+        database.stock().findByOperationId(operationId)?.let { return@withTransaction it }
+        val item = database.items().findById(itemId) ?: error("الصنف غير موجود")
+        val before = item.quantityMilli
+        require(before != newQuantityMilli) { "الكمية مطابقة للرصيد الحالي" }
+        val increase = newQuantityMilli > before
+        val delta = if (increase) Math.subtractExact(newQuantityMilli, before) else Math.subtractExact(before, newQuantityMilli)
+        check(database.items().setQuantity(itemId, newQuantityMilli, createdAt) == 1)
+        val movement = StockMovementEntity(
+            id = UUID.randomUUID().toString(),
+            operationId = operationId,
+            itemId = itemId,
+            movementType = if (increase) "ADJUSTMENT_IN" else "ADJUSTMENT_OUT",
+            quantityInMilli = if (increase) delta else 0,
+            quantityOutMilli = if (increase) 0 else delta,
+            balanceBeforeMilli = before,
+            balanceAfterMilli = newQuantityMilli,
+            sourceType = "MANUAL_ADJUSTMENT",
+            sourceId = operationId,
+            note = note,
+            createdAt = createdAt
+        )
+        database.stock().insertMovement(movement)
+        database.references().insertActivity(
+            ActivityLogEntity(UUID.randomUUID().toString(), null, "STOCK_ADJUSTMENT", "ITEM", itemId, note, createdAt)
+        )
+        movement
+    }
+
 }
