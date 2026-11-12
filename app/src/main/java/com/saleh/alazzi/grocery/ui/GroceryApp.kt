@@ -74,6 +74,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -1031,7 +1032,8 @@ private fun NotesScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.
 @Composable
 private fun BackupScreen(manager: GroceryBackupManager) {
     val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf("احفظ نسخة JSON من بياناتك قبل تحديث الجهاز أو التطبيق.") }
+    var status by remember { mutableStateOf("احفظ نسخة JSON مشفرة من بياناتك قبل تحديث الجهاز أو التطبيق.") }
+    var passphrase by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
     var showConfirm by remember { mutableStateOf(false) }
@@ -1041,7 +1043,7 @@ private fun BackupScreen(manager: GroceryBackupManager) {
     ) { uri ->
         if (uri != null) scope.launch {
             busy = true
-            runCatching { manager.exportTo(uri) }
+            runCatching { manager.exportTo(uri, passphrase) }
                 .onSuccess { status = "نجح النسخ الاحتياطي: ${it.recordCount} سجل. SHA-256: ${it.checksum}" }
                 .onFailure { status = it.message ?: "فشل إنشاء النسخة الاحتياطية" }
             busy = false
@@ -1058,14 +1060,15 @@ private fun BackupScreen(manager: GroceryBackupManager) {
 
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("النسخ الاحتياطي والاستعادة", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("يتم تصدير البيانات في ملف JSON بإصدار مخطط وبصمة SHA-256 للتحقق من سلامته.")
+        Text("يتم تشفير ملف JSON باستخدام AES-GCM ومفتاح مشتق من كلمة مرورك. احتفظ بكلمة المرور لاستعادة النسخة.")
+        OutlinedTextField(passphrase, { passphrase = it }, label = { Text("كلمة مرور النسخة (8 أحرف على الأقل)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation())
         Button(
-            enabled = !busy,
+            enabled = !busy && passphrase.length >= 8,
             onClick = { createLauncher.launch("AlAzzi_Backup_${System.currentTimeMillis()}.json") },
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (busy) "جارٍ التنفيذ..." else "إنشاء نسخة احتياطية") }
         FilledTonalButton(
-            enabled = !busy,
+            enabled = !busy && passphrase.length >= 8,
             onClick = { restoreLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
             modifier = Modifier.fillMaxWidth()
         ) { Text("اختيار نسخة للاستعادة") }
@@ -1092,7 +1095,7 @@ private fun BackupScreen(manager: GroceryBackupManager) {
                     showConfirm = false
                     scope.launch {
                         busy = true
-                        runCatching { manager.restoreFrom(uri, confirmed = true) }
+                        runCatching { manager.restoreFrom(uri, passphrase, confirmed = true) }
                             .onSuccess {
                                 status = "نجحت الاستعادة: ${it.recordCount} سجل. تم حفظ نسخة ما قبل الاستعادة."
                             }
