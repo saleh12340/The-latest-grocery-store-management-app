@@ -1213,6 +1213,180 @@ private fun UsersScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.
     }
 }
 
+
+private data class ReturnLineUi(
+    val id: String,
+    val name: String,
+    val quantityMilli: Long,
+    val unitPrice: Long,
+    val lineTotal: Long
+)
+
+@Composable
+private fun InvoiceHubScreen(onSales: () -> Unit, onPurchases: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("الفواتير", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Button(onClick = onSales, modifier = Modifier.fillMaxWidth()) { Text("فواتير المبيعات") }
+        FilledTonalButton(onClick = onPurchases, modifier = Modifier.fillMaxWidth()) { Text("فواتير المشتريات") }
+    }
+}
+
+@Composable
+private fun SalesInvoiceHistoryScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.SalesInvoiceEntity>, onOpen: (String) -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("فواتير المبيعات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        if (values.isEmpty()) EmptyState("لا توجد فواتير بيع", "ستظهر الفواتير بعد حفظها")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { invoice ->
+                Card(Modifier.fillMaxWidth().clickable { onOpen(invoice.id) }) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row {
+                            Text("فاتورة #${invoice.invoiceNumber}", Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(invoice.total.toString())
+                        }
+                        Text("المدفوع: ${invoice.paid}   المتبقي: ${invoice.remaining}")
+                        Text("الحالة: ${invoice.status}")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PurchaseInvoiceHistoryScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.PurchaseInvoiceEntity>, onOpen: (String) -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("فواتير المشتريات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        if (values.isEmpty()) EmptyState("لا توجد فواتير شراء", "ستظهر الفواتير بعد حفظها")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { invoice ->
+                Card(Modifier.fillMaxWidth().clickable { onOpen(invoice.id) }) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row {
+                            Text("فاتورة #${invoice.invoiceNumber}", Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(invoice.total.toString())
+                        }
+                        Text("المدفوع: ${invoice.paid}   المتبقي: ${invoice.remaining}")
+                        Text("الحالة: ${invoice.status}")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SalesInvoiceDetailScreen(id: String, viewModel: GroceryViewModel, onBack: () -> Unit) {
+    val invoice by viewModel.salesInvoice(id).collectAsState(initial = null)
+    val lines by viewModel.salesInvoiceLines(id).collectAsState(initial = emptyList())
+    var showReturn by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = onBack) { Text("رجوع") }
+        if (invoice == null) EmptyState("الفاتورة غير موجودة", "تعذر تحميل بيانات الفاتورة")
+        else {
+            Text("فاتورة بيع #${invoice!!.invoiceNumber}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("الإجمالي: ${invoice!!.total}   المدفوع: ${invoice!!.paid}   المتبقي: ${invoice!!.remaining}")
+            Text("الحالة: ${invoice!!.status}")
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lines, key = { it.id }) { line ->
+                    Card {
+                        Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                            Text(line.itemNameSnapshot, fontWeight = FontWeight.Bold)
+                            Text("الكمية: ${line.quantityMilli / 1000.0}   سعر الوحدة: ${line.unitPrice}   الإجمالي: ${line.lineTotal}")
+                        }
+                    }
+                }
+            }
+            Button(onClick = { showReturn = true }, enabled = invoice!!.status == "POSTED", modifier = Modifier.fillMaxWidth()) { Text("إنشاء مرتجع بيع") }
+        }
+    }
+    if (showReturn && invoice != null) ReturnDialog(
+        title = "مرتجع فاتورة البيع",
+        lines = lines.map { ReturnLineUi(it.id, it.itemNameSnapshot, it.quantityMilli, it.unitPrice, it.lineTotal) },
+        onSave = { returnLines, note -> viewModel.returnSale(id, returnLines, note); showReturn = false },
+        onDismiss = { showReturn = false }
+    )
+}
+
+@Composable
+private fun PurchaseInvoiceDetailScreen(id: String, viewModel: GroceryViewModel, onBack: () -> Unit) {
+    val invoice by viewModel.purchaseInvoice(id).collectAsState(initial = null)
+    val lines by viewModel.purchaseInvoiceLines(id).collectAsState(initial = emptyList())
+    var showReturn by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = onBack) { Text("رجوع") }
+        if (invoice == null) EmptyState("الفاتورة غير موجودة", "تعذر تحميل بيانات الفاتورة")
+        else {
+            Text("فاتورة شراء #${invoice!!.invoiceNumber}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("الإجمالي: ${invoice!!.total}   المدفوع: ${invoice!!.paid}   المتبقي: ${invoice!!.remaining}")
+            Text("الحالة: ${invoice!!.status}")
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(lines, key = { it.id }) { line ->
+                    Card {
+                        Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                            Text(line.itemNameSnapshot, fontWeight = FontWeight.Bold)
+                            Text("الكمية: ${line.quantityMilli / 1000.0}   سعر الشراء: ${line.unitCost}   الإجمالي: ${line.lineTotal}")
+                        }
+                    }
+                }
+            }
+            Button(onClick = { showReturn = true }, enabled = invoice!!.status == "POSTED", modifier = Modifier.fillMaxWidth()) { Text("إنشاء مرتجع شراء") }
+        }
+    }
+    if (showReturn && invoice != null) ReturnDialog(
+        title = "مرتجع فاتورة الشراء",
+        lines = lines.map { ReturnLineUi(it.id, it.itemNameSnapshot, it.quantityMilli, it.unitCost, it.lineTotal) },
+        onSave = { returnLines, note -> viewModel.returnPurchase(id, returnLines, note); showReturn = false },
+        onDismiss = { showReturn = false }
+    )
+}
+
+@Composable
+private fun ReturnDialog(
+    title: String,
+    lines: List<ReturnLineUi>,
+    onSave: (List<com.saleh.alazzi.grocery.data.repository.ReturnLineInput>, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var note by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(lines, key = { it.id }) { line ->
+                        Column {
+                            Text(line.name, fontWeight = FontWeight.Bold)
+                            Text("الكمية الأصلية: ${line.quantityMilli / 1000.0}")
+                            OutlinedTextField(
+                                value = quantities[line.id] ?: "",
+                                onValueChange = { quantities = quantities + (line.id to it) },
+                                label = { Text("الكمية المرتجعة") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(note, { note = it }, label = { Text("سبب / ملاحظة المرتجع") })
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val selected = lines.mapNotNull { line ->
+                    val raw = quantities[line.id]?.toBigDecimalOrNull() ?: return@mapNotNull null
+                    val milli = runCatching { raw.multiply(BigDecimal("1000")).longValueExact() }.getOrNull()
+                    if (milli != null && milli > 0) com.saleh.alazzi.grocery.data.repository.ReturnLineInput(line.id, milli) else null
+                }
+                if (selected.isNotEmpty()) onSave(selected, note)
+            }, enabled = quantities.values.any { it.toBigDecimalOrNull()?.signum() == 1 }) { Text("حفظ المرتجع") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
 @Composable
 private fun ReportsScreen(
     cash: Long,
