@@ -59,6 +59,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -147,8 +149,16 @@ fun GroceryApp(viewModel: GroceryViewModel) {
                     onNavigate = { nav.navigate(it) }
                 )
             }
-            composable(Routes.CUSTOMERS) { CustomerScreen(customers, viewModel) }
-            composable(Routes.SUPPLIERS) { SupplierScreen(suppliers, viewModel) }
+            composable(Routes.CUSTOMERS) { CustomerScreen(customers, viewModel) { nav.navigate("customer/$it") } }
+            composable("customer/{accountId}", arguments = listOf(navArgument("accountId") { type = NavType.StringType })) { entry ->
+                val id = entry.arguments?.getString("accountId").orEmpty()
+                CustomerAccountScreen(id, customers.firstOrNull { it.id == id }, viewModel)
+            }
+            composable(Routes.SUPPLIERS) { SupplierScreen(suppliers, viewModel) { nav.navigate("supplier/$it") } }
+            composable("supplier/{accountId}", arguments = listOf(navArgument("accountId") { type = NavType.StringType })) { entry ->
+                val id = entry.arguments?.getString("accountId").orEmpty()
+                SupplierAccountScreen(id, suppliers.firstOrNull { it.id == id }, viewModel)
+            }
             composable(Routes.INVENTORY) { InventoryScreen(items, lowStock.map { it.id }.toSet(), viewModel) }
             composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, viewModel) }
             composable(Routes.PURCHASE) { InvoiceEntryScreen(false, items, customers, suppliers, viewModel) }
@@ -245,7 +255,7 @@ private fun ActionCard(label: String, icon: androidx.compose.ui.graphics.vector.
 }
 
 @Composable
-private fun CustomerScreen(values: List<CustomerEntity>, viewModel: GroceryViewModel) {
+private fun CustomerScreen(values: List<CustomerEntity>, viewModel: GroceryViewModel, onOpen: (String) -> Unit) {
     var showAdd by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -255,7 +265,7 @@ private fun CustomerScreen(values: List<CustomerEntity>, viewModel: GroceryViewM
         if (values.isEmpty()) EmptyState("لا يوجد عملاء بعد", "أضف أول عميل للبدء")
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(values, key = { it.id }) { customer ->
-                Card {
+                Card(modifier = Modifier.clickable { onOpen(customer.id) }) {
                     Column(Modifier.fillMaxWidth().padding(14.dp)) {
                         Text(customer.name, fontWeight = FontWeight.Bold)
                         Text(customer.phone ?: "لا يوجد رقم هاتف", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -269,7 +279,7 @@ private fun CustomerScreen(values: List<CustomerEntity>, viewModel: GroceryViewM
 }
 
 @Composable
-private fun SupplierScreen(values: List<SupplierEntity>, viewModel: GroceryViewModel) {
+private fun SupplierScreen(values: List<SupplierEntity>, viewModel: GroceryViewModel, onOpen: (String) -> Unit) {
     var showAdd by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -279,7 +289,7 @@ private fun SupplierScreen(values: List<SupplierEntity>, viewModel: GroceryViewM
         if (values.isEmpty()) EmptyState("لا يوجد موردون بعد", "أضف أول مورد للبدء")
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(values, key = { it.id }) { supplier ->
-                Card {
+                Card(modifier = Modifier.clickable { onOpen(supplier.id) }) {
                     Column(Modifier.fillMaxWidth().padding(14.dp)) {
                         Text(supplier.name, fontWeight = FontWeight.Bold)
                         Text(supplier.phone ?: "لا يوجد رقم هاتف", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -467,6 +477,101 @@ private fun InvoiceEntryScreen(
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (saving) "جارٍ الحفظ..." else "حفظ الفاتورة") }
     }
+}
+
+
+@Composable
+private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewModel: GroceryViewModel) {
+    val transactions by viewModel.customerTransactions(id).collectAsState(initial = emptyList())
+    var showPayment by remember { mutableStateOf(false) }
+    if (customer == null) { EmptyState("العميل غير موجود", "قد يكون السجل غير متاح"); return }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text(customer.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(customer.phone ?: "لا يوجد رقم هاتف")
+        Text("الرصيد المستحق: \${customer.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
+        Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth()) { Text("قبض من العميل") }
+        Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر الفواتير والدفعات هنا")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(transactions, key = { it.id }) { tx ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row {
+                            Text(if (tx.type == "PAYMENT") "تسديد / قبض" else tx.type, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
+                        }
+                        Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("الرصيد بعد العملية: \${tx.balanceAfter}")
+                    }
+                }
+            }
+        }
+    }
+    if (showPayment) PaymentDialog(
+        title = "قبض من العميل",
+        maxAmount = customer.balance,
+        onSave = { amount, note -> viewModel.receiveCustomerPayment(id, amount, note); showPayment = false },
+        onDismiss = { showPayment = false }
+    )
+}
+
+@Composable
+private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewModel: GroceryViewModel) {
+    val transactions by viewModel.supplierTransactions(id).collectAsState(initial = emptyList())
+    var showPayment by remember { mutableStateOf(false) }
+    if (supplier == null) { EmptyState("المورد غير موجود", "قد يكون السجل غير متاح"); return }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text(supplier.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(supplier.phone ?: "لا يوجد رقم هاتف")
+        Text("المبلغ المستحق للمورد: \${supplier.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
+        Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth()) { Text("دفع للمورد") }
+        Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر فواتير الشراء والدفعات هنا")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(transactions, key = { it.id }) { tx ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row {
+                            Text(if (tx.type == "PAYMENT") "دفع للمورد" else tx.type, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
+                        }
+                        Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("الرصيد بعد العملية: \${tx.balanceAfter}")
+                    }
+                }
+            }
+        }
+    }
+    if (showPayment) PaymentDialog(
+        title = "دفع للمورد",
+        maxAmount = supplier.balance,
+        onSave = { amount, note -> viewModel.paySupplier(id, amount, note); showPayment = false },
+        onDismiss = { showPayment = false }
+    )
+}
+
+@Composable
+private fun PaymentDialog(title: String, maxAmount: Long, onSave: (Long, String) -> Unit, onDismiss: () -> Unit) {
+    var amount by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("الرصيد الحالي: $maxAmount")
+                OutlinedTextField(amount, { amount = it }, label = { Text("المبلغ") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                OutlinedTextField(note, { note = it }, label = { Text("البيان") })
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val value = amount.toLongOrNull()
+                if (value != null && value > 0 && value <= maxAmount) onSave(value, note)
+            }) { Text("حفظ العملية") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 @Composable
