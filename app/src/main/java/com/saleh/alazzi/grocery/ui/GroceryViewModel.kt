@@ -58,12 +58,14 @@ class GroceryViewModel(
             runCatching {
                 val cleanName = name.trim()
                 require(cleanName.isNotEmpty()) { "اكتب اسم العميل" }
+                val cleanPhone = phone.trim().ifBlank { null }
+                require(database.customers().duplicateCount(cleanName, cleanPhone) == 0) { "العميل مسجل مسبقاً" }
                 val now = System.currentTimeMillis()
                 database.customers().insert(
                     CustomerEntity(
                         id = UUID.randomUUID().toString(),
                         name = cleanName,
-                        phone = phone.trim().ifBlank { null },
+                        phone = cleanPhone,
                         address = address.trim().ifBlank { null },
                         notes = notes.trim().ifBlank { null },
                         createdAt = now,
@@ -80,12 +82,14 @@ class GroceryViewModel(
             runCatching {
                 val cleanName = name.trim()
                 require(cleanName.isNotEmpty()) { "اكتب اسم المورد" }
+                val cleanPhone = phone.trim().ifBlank { null }
+                require(database.suppliers().duplicateCount(cleanName, cleanPhone) == 0) { "المورد مسجل مسبقاً" }
                 val now = System.currentTimeMillis()
                 database.suppliers().insert(
                     SupplierEntity(
                         id = UUID.randomUUID().toString(),
                         name = cleanName,
-                        phone = phone.trim().ifBlank { null },
+                        phone = cleanPhone,
                         address = address.trim().ifBlank { null },
                         notes = notes.trim().ifBlank { null },
                         createdAt = now,
@@ -102,8 +106,10 @@ class GroceryViewModel(
             runCatching {
                 val cleanName = name.trim()
                 require(cleanName.isNotEmpty()) { "اكتب اسم الصنف" }
+                val cleanBarcode = barcode.trim().ifBlank { null }
+                require(database.items().duplicateCount(cleanName, cleanBarcode) == 0) { "الصنف أو الباركود مسجل مسبقاً" }
                 val now = System.currentTimeMillis()
-                val quantityMilli = (quantity.toBigDecimalOrNull() ?: error("الكمية غير صحيحة"))
+                val quantityMilli/ = (quantity.toBigDecimalOrNull() ?: error("الكمية غير صحيحة"))
                     .multiply(java.math.BigDecimal("1000")).longValueExact()
                 val buy = purchasePrice.toLongOrNull() ?: error("سعر الشراء غير صحيح")
                 val sell = salePrice.toLongOrNull() ?: error("سعر البيع غير صحيح")
@@ -112,7 +118,7 @@ class GroceryViewModel(
                     ItemEntity(
                         id = UUID.randomUUID().toString(),
                         name = cleanName,
-                        barcode = barcode.trim().ifBlank { null },
+                        barcode = cleanBarcode,
                         quantityMilli = quantityMilli,
                         purchasePrice = buy,
                         salePrice = sell,
