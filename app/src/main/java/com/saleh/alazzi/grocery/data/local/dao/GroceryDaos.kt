@@ -81,7 +81,7 @@ interface SalesInvoiceDao {
     fun observeSalesTotal(from: Long, to: Long): Flow<Long>
     @Query("SELECT COUNT(*) FROM sales_invoices WHERE status='POSTED' AND createdAt>=:from AND createdAt<:to")
     fun observeSalesCount(from: Long, to: Long): Flow<Long>
-    @Query("SELECT COALESCE(SUM(si.lineTotal - ((si.unitCostSnapshot * si.quantityMilli + 500) / 1000)),0) FROM sales_invoice_items si INNER JOIN sales_invoices s ON s.id=si.invoiceId WHERE s.status='POSTED' AND s.createdAt>=:from AND s.createdAt<:to")
+    @Query("SELECT COALESCE(SUM(si.lineTotal - ((si.unitCostSnapshot * si.quantityMilli + 500) / 1000) - CASE WHEN s.subtotal>0 THEN ((s.discount * si.lineTotal + s.subtotal / 2) / s.subtotal) ELSE 0 END),0) FROM sales_invoice_items si INNER JOIN sales_invoices s ON s.id=si.invoiceId WHERE s.status='POSTED' AND s.createdAt>=:from AND s.createdAt<:to")
     fun observeGrossProfit(from: Long, to: Long): Flow<Long>
 
     @Query("UPDATE sales_invoices SET status=:status WHERE id=:id AND status='POSTED'")
