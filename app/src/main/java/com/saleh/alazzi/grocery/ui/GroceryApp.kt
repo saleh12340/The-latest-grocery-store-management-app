@@ -427,6 +427,7 @@ private fun AddPersonDialog(title: String, onSave: (String, String, String, Stri
 @Composable
 private fun InventoryScreen(values: List<ItemEntity>, lowStockIds: Set<String>, viewModel: GroceryViewModel) {
     var showAdd by remember { mutableStateOf(false) }
+    var adjustTarget by remember { mutableStateOf<ItemEntity?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("المخزون والأصناف", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -443,12 +444,45 @@ private fun InventoryScreen(values: List<ItemEntity>, lowStockIds: Set<String>, 
                         }
                         Text("الكمية: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}")
                         Text("شراء: ${item.purchasePrice}   بيع: ${item.salePrice}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { adjustTarget = item }) { Text("تسوية كمية المخزون") }
                     }
                 }
             }
         }
     }
     if (showAdd) AddItemDialog(viewModel) { showAdd = false }
+    adjustTarget?.let { item -> StockAdjustmentDialog(item, viewModel) { adjustTarget = null } }
+}
+
+
+@Composable
+private fun StockAdjustmentDialog(item: ItemEntity, viewModel: GroceryViewModel, onDismiss: () -> Unit) {
+    var quantity by rememberSaveable(item.id) {
+        mutableStateOf(BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString())
+    }
+    var note by remember { mutableStateOf("") }
+    var operationId by rememberSaveable(item.id) { mutableStateOf(UUID.randomUUID().toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تسوية مخزون: ${item.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("الرصيد الحالي: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}")
+                OutlinedTextField(quantity, { quantity = it }, label = { Text("الكمية الفعلية الجديدة") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(note, { note = it }, label = { Text("سبب التسوية") })
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val milli = runCatching { BigDecimal(quantity).multiply(BigDecimal("1000")).longValueExact() }.getOrNull()
+                if (milli != null && milli >= 0 && note.isNotBlank()) {
+                    viewModel.adjustStock(item.id, milli, note, operationId)
+                    onDismiss()
+                }
+            }) { Text("حفظ التسوية") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 @Composable
