@@ -131,6 +131,7 @@ class GroceryViewModel(
                         if (it.wasDuplicate) "فاتورة الشراء محفوظة مسبقاً: ${it.invoiceNumber}"
                         else "تم حفظ فاتورة الشراء رقم ${it.invoiceNumber}"
                     )
+                    onSaved(it)
                     onFinished(true)
                 }
                 .onFailure {
