@@ -32,7 +32,7 @@ class GroceryBackupManagerTest {
             .build()
         manager = GroceryBackupManager(context, database)
         backupFile = File(context.cacheDir, "backup_test.json")
-        backupUri = FileProvider.getUriForFile(context, "\${context.packageName}.files", backupFile)
+        backupUri = FileProvider.getUriForFile(context, "${context.packageName}.files", backupFile)
     }
 
     @After
