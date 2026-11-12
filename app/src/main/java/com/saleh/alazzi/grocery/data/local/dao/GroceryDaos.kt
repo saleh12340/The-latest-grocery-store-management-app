@@ -99,6 +99,8 @@ interface PurchaseInvoiceDao {
     suspend fun findById(id: String): PurchaseInvoiceEntity?
     @Query("SELECT * FROM purchase_invoices WHERE id=:id LIMIT 1")
     fun observeById(id: String): Flow<PurchaseInvoiceEntity?>
+    @Query("UPDATE purchase_invoices SET status=:status WHERE id=:id AND status='POSTED'")
+    suspend fun changePostedStatus(id: String, status: String): Int
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertLines(lines: List<PurchaseInvoiceItemEntity>)
     @Query("SELECT * FROM purchase_invoices ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
     fun observePage(limit: Int, offset: Int): Flow<List<PurchaseInvoiceEntity>>
