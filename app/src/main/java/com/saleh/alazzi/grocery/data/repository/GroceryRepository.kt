@@ -323,4 +323,88 @@ class GroceryRepository(private val database: GroceryDatabase) {
             )
             SaveInvoiceResult(invoiceId, invoiceNumber, false)
         }
+    suspend fun receiveCustomerPayment(
+        operationId: String,
+        customerId: String,
+        amount: Long,
+        paymentMethod: String,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank() && amount > 0) { "بيانات السداد غير صحيحة" }
+        if (database.ledger().findCustomerOperation("$operationId:ledger") != null) return@withTransaction
+        val customer = database.customers().findById(customerId) ?: error("العميل غير موجود")
+        val newBalance = MoneyMath.reduceBalance(customer.balance, amount)
+        database.ledger().insertCustomer(
+            CustomerTransactionEntity(
+                id = UUID.randomUUID().toString(),
+                operationId = "$operationId:ledger",
+                customerId = customerId,
+                type = "PAYMENT",
+                amount = amount,
+                balanceAfter = newBalance,
+                sourceType = "CUSTOMER_PAYMENT",
+                sourceId = operationId,
+                note = note,
+                createdAt = createdAt
+            )
+        )
+        check(database.customers().setBalance(customerId, newBalance, createdAt) == 1)
+        database.cash().insert(
+            CashTransactionEntity(
+                id = UUID.randomUUID().toString(),
+                idempotencyKey = "$operationId:cash",
+                direction = "IN",
+                amount = amount,
+                sourceType = "CUSTOMER_PAYMENT",
+                sourceId = customerId,
+                paymentMethod = paymentMethod,
+                note = note,
+                createdAt = createdAt
+            )
+        )
+    }
+
+    suspend fun paySupplier(
+        operationId: String,
+        supplierId: String,
+        amount: Long,
+        paymentMethod: String,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank() && amount > 0) { "بيانات الدفع غير صحيحة" }
+        if (database.ledger().findSupplierOperation("$operationId:ledger") != null) return@withTransaction
+        val supplier = database.suppliers().findById(supplierId) ?: error("المورد غير موجود")
+        val newBalance = MoneyMath.reduceBalance(supplier.balance, amount)
+        database.ledger().insertSupplier(
+            SupplierTransactionEntity(
+                id = UUID.randomUUID().toString(),
+                operationId = "$operationId:ledger",
+                supplierId = supplierId,
+                type = "PAYMENT",
+                amount = amount,
+                balanceAfter = newBalance,
+                sourceType = "SUPPLIER_PAYMENT",
+                sourceId = operationId,
+                note = note,
+                createdAt = createdAt
+            )
+        )
+        check(database.suppliers().setBalance(supplierId, newBalance, createdAt) == 1)
+        database.cash().insert(
+            CashTransactionEntity(
+                id = UUID.randomUUID().toString(),
+                idempotencyKey = "$operationId:cash",
+                direction = "OUT",
+                amount = amount,
+                sourceType = "SUPPLIER_PAYMENT",
+                sourceId = supplierId,
+                paymentMethod = paymentMethod,
+                note = note,
+                createdAt = createdAt
+            )
+        )
+    }
+
 }
