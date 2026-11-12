@@ -150,11 +150,14 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             NavigationBar {
-                val destinations = listOf(
+                val destinations = if (session?.role == "MANAGER") listOf(
                     Triple(Routes.HOME, "الرئيسية", Icons.Default.Home),
                     Triple(Routes.CUSTOMERS, "العملاء", Icons.Default.People),
                     Triple(Routes.SUPPLIERS, "الموردون", Icons.Default.Store),
                     Triple(Routes.INVENTORY, "المخزون", Icons.Default.Inventory2)
+                ) else listOf(
+                    Triple(Routes.HOME, "الرئيسية", Icons.Default.Home),
+                    Triple(Routes.CUSTOMERS, "العملاء", Icons.Default.People)
                 )
                 destinations.forEach { (route, label, icon) ->
                     NavigationBarItem(
@@ -194,15 +197,15 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
                 val id = entry.arguments?.getString("accountId").orEmpty()
                 CustomerAccountScreen(id, customers.firstOrNull { it.id == id }, viewModel)
             }
-            composable(Routes.SUPPLIERS) { SupplierScreen(suppliers, viewModel) { nav.navigate("supplier/$it") } }
+            composable(Routes.SUPPLIERS) { if (session?.role == "MANAGER") SupplierScreen(suppliers, viewModel) { nav.navigate("supplier/$it") } else EmptyState("غير مصرح", "هذه الشاشة للمدير فقط") }
             composable("supplier/{accountId}", arguments = listOf(navArgument("accountId") { type = NavType.StringType })) { entry ->
                 val id = entry.arguments?.getString("accountId").orEmpty()
                 SupplierAccountScreen(id, suppliers.firstOrNull { it.id == id }, viewModel)
             }
-            composable(Routes.INVENTORY) { InventoryScreen(items, lowStock.map { it.id }.toSet(), viewModel) }
+            composable(Routes.INVENTORY) { if (session?.role == "MANAGER") InventoryScreen(items, lowStock.map { it.id }.toSet(), viewModel) else EmptyState("غير مصرح", "هذه الشاشة للمدير فقط") }
             composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, viewModel) }
             composable(Routes.PURCHASE) { InvoiceEntryScreen(false, items, customers, suppliers, viewModel) }
-            composable(Routes.REPORTS) { ReportsScreen(cash, customers, suppliers, items, lowStock) }
+            composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
             composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
             composable(Routes.PRINTER) { PrinterScreen() }
             composable(Routes.EXPENSES) { ExpensesScreen(expenses, viewModel) }
@@ -277,18 +280,18 @@ private fun HomeScreen(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionCard("بيع جديد", Icons.Default.PointOfSale, Modifier.weight(1f)) { onNavigate(Routes.SALE) }
-                ActionCard("شراء جديد", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.PURCHASE) }
+                if (isManager) ActionCard("شراء جديد", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.PURCHASE) }
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionCard("العملاء", Icons.Default.People, Modifier.weight(1f)) { onNavigate(Routes.CUSTOMERS) }
-                ActionCard("الموردون", Icons.Default.Store, Modifier.weight(1f)) { onNavigate(Routes.SUPPLIERS) }
+                if (isManager) ActionCard("الموردون", Icons.Default.Store, Modifier.weight(1f)) { onNavigate(Routes.SUPPLIERS) }
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ActionCard("التقارير", Icons.Default.Assessment, Modifier.weight(1f)) { onNavigate(Routes.REPORTS) }
+                if (isManager) ActionCard("التقارير", Icons.Default.Assessment, Modifier.weight(1f)) { onNavigate(Routes.REPORTS) }
                 ActionCard("الملاحظات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.NOTES) }
             }
         }
