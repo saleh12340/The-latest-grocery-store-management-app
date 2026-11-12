@@ -28,6 +28,11 @@ class GroceryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val lowStockItems = database.items().observeLowStock()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val expenses = database.expenses().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val transfers = database.transfers().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val cashBalance = database.cash().observeBalance()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
     private val todayRange = todayRange()
@@ -179,6 +184,40 @@ class GroceryViewModel(
                 )
             }.onSuccess { eventChannel.send("تم تسجيل دفع المورد وتحديث الصندوق") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر تسجيل الدفع")) }
+        }
+    }
+
+    fun recordExpense(category: String, amount: Long, description: String) {
+        viewModelScope.launch {
+            runCatching {
+                repository.recordExpense(
+                    operationId = UUID.randomUUID().toString(),
+                    category = category,
+                    amount = amount,
+                    paymentMethod = "CASH",
+                    description = description
+                )
+            }.onSuccess { eventChannel.send("تم تسجيل المصروف وتحديث الصندوق") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر تسجيل المصروف")) }
+        }
+    }
+
+    fun recordTransfer(recipient: String, phone: String, amount: Long, fees: Long, direction: String, note: String) {
+        viewModelScope.launch {
+            runCatching {
+                repository.recordTransfer(
+                    operationId = UUID.randomUUID().toString(),
+                    recipientName = recipient,
+                    phone = phone,
+                    direction = direction,
+                    amount = amount,
+                    fees = fees,
+                    paymentMethod = "CASH",
+                    status = "COMPLETED",
+                    note = note
+                )
+            }.onSuccess { eventChannel.send("تم تسجيل الحوالة وتحديث الصندوق") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر تسجيل الحوالة")) }
         }
     }
 
