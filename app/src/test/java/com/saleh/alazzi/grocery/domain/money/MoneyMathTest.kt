@@ -1,0 +1,39 @@
+package com.saleh.alazzi.grocery.domain.money
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Test
+
+class MoneyMathTest {
+    @Test fun calculatesLineTotalFromThousandthQuantity() {
+        assertEquals(375L, MoneyMath.lineTotal(1_500, 250))
+    }
+
+    @Test fun roundsHalfUpWithoutFloatingPoint() {
+        assertEquals(2L, MoneyMath.lineTotal(500, 3))
+    }
+
+    @Test fun calculatesDiscountedTotal() {
+        assertEquals(950L, MoneyMath.total(listOf(400L, 700L), 150L))
+    }
+
+    @Test fun rejectsDiscountGreaterThanSubtotal() {
+        assertThrows(IllegalArgumentException::class.java) {
+            MoneyMath.total(listOf(100L), 101L)
+        }
+    }
+
+    @Test fun calculatesRemainingAndRejectsOverpayment() {
+        assertEquals(250L, MoneyMath.remaining(1_000L, 750L))
+        assertThrows(IllegalArgumentException::class.java) {
+            MoneyMath.remaining(100L, 101L)
+        }
+    }
+
+    @Test fun balanceArithmeticIsChecked() {
+        assertEquals(1_250L, MoneyMath.addBalance(1_000L, 250L))
+        assertThrows(IllegalArgumentException::class.java) {
+            MoneyMath.reduceBalance(100L, 101L)
+        }
+    }
+}
