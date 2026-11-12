@@ -44,6 +44,7 @@ abstract class GroceryDatabase : RoomDatabase() {
     abstract fun ledger(): LedgerDao
     abstract fun stock(): StockDao
     abstract fun cash(): CashDao
+    abstract fun returns(): ReturnDao
     abstract fun expenses(): ExpenseDao
     abstract fun transfers(): TransferDao
     abstract fun references(): ReferenceDao
