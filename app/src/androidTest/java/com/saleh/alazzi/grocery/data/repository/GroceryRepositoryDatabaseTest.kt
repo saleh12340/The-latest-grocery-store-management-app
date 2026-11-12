@@ -88,6 +88,7 @@ class GroceryRepositoryDatabaseTest {
         assertEquals(50L, database.cash().observeBalance().first())
         assertEquals(1, database.salesInvoices().lines(first.invoiceId).size)
         assertEquals(2, database.ledger().observeCustomer("customer-1").first().size)
+        assertEquals(80L, database.salesInvoices().observeGrossProfit(now - 1, now + 1).first())
     }
 
     @Test
