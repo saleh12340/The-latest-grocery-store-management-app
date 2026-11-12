@@ -9,6 +9,7 @@ import com.saleh.alazzi.grocery.data.local.entity.SupplierEntity
 import com.saleh.alazzi.grocery.data.local.entity.NoteEntity
 import com.saleh.alazzi.grocery.data.local.entity.UserEntity
 import com.saleh.alazzi.grocery.security.PinHasher
+import com.saleh.alazzi.grocery.security.PinCredential
 import com.saleh.alazzi.grocery.data.repository.CreateInvoiceInput
 import com.saleh.alazzi.grocery.data.repository.GroceryRepository
 import kotlinx.coroutines.channels.Channel
