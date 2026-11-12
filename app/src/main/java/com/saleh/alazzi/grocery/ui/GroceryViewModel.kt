@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.Calendar
 
 class GroceryViewModel(
     private val database: GroceryDatabase,
@@ -29,6 +30,16 @@ class GroceryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val cashBalance = database.cash().observeBalance()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    private val todayRange = todayRange()
+    val salesToday = database.salesInvoices().observeSalesTotal(todayRange.first, todayRange.second)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    val purchasesToday = database.purchaseInvoices().observePurchaseTotal(todayRange.first, todayRange.second)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    val invoicesToday = database.salesInvoices().observeSalesCount(todayRange.first, todayRange.second)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    val grossProfitToday = database.salesInvoices().observeGrossProfit(todayRange.first, todayRange.second)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
 
     private val eventChannel = Channel<String>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
@@ -173,6 +184,17 @@ class GroceryViewModel(
 
     fun customerTransactions(customerId: String) = database.ledger().observeCustomer(customerId)
     fun supplierTransactions(supplierId: String) = database.ledger().observeSupplier(supplierId)
+
+    private fun todayRange(): Pair<Long, Long> {
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val start = calendar.timeInMillis
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+        return start to calendar.timeInMillis
+    }
 
     private fun messageFor(error: Throwable, fallback: String): String =
         error.message?.takeIf { it.isNotBlank() } ?: fallback
