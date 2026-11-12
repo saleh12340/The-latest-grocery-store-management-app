@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import com.saleh.alazzi.grocery.data.backup.GroceryBackupManager
 import com.saleh.alazzi.grocery.data.local.GroceryDatabase
 import com.saleh.alazzi.grocery.data.repository.GroceryRepository
 import com.saleh.alazzi.grocery.ui.GroceryApp
@@ -41,7 +42,7 @@ class MainActivity : ComponentActivity() {
             )
             MaterialTheme(colorScheme = colors) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    GroceryApp(viewModel)
+                    GroceryApp(viewModel, GroceryBackupManager(applicationContext, database))
                 }
             }
         }
