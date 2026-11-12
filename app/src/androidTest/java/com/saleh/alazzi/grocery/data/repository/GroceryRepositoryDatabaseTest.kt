@@ -166,7 +166,7 @@ class GroceryRepositoryDatabaseTest {
         repository.adjustStock("adjust-1", "item-1", 9_000, "إعادة محاولة", now + 1)
 
         assertEquals(7_500L, database.items().findById("item-1")!!.quantityMilli)
-        assertEquals(1, database.stock().observeForItem("item-1").first().size)
+        assertEquals(1, database.stock().observeMovements("item-1").first().size)
     }
 
 }
