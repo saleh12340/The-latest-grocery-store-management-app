@@ -135,6 +135,8 @@ interface LedgerDao {
 @Dao
 interface StockDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertMovement(value: StockMovementEntity)
+    @Query("SELECT * FROM stock_movements WHERE operationId=:operationId LIMIT 1")
+    suspend fun findByOperationId(operationId: String): StockMovementEntity?
     @Query("SELECT * FROM stock_movements WHERE itemId=:itemId ORDER BY createdAt DESC")
     fun observeMovements(itemId: String): Flow<List<StockMovementEntity>>
     @Query("SELECT * FROM stock_movements WHERE sourceType=:sourceType AND sourceId=:sourceId")
