@@ -88,6 +88,18 @@ interface SalesInvoiceDao {
     @Query("SELECT COALESCE(SUM(si.lineTotal - ((si.unitCostSnapshot * si.quantityMilli + 500) / 1000) - CASE WHEN s.subtotal>0 THEN ((s.discount * si.lineTotal + s.subtotal / 2) / s.subtotal) ELSE 0 END),0) FROM sales_invoice_items si INNER JOIN sales_invoices s ON s.id=si.invoiceId WHERE s.status='POSTED' AND s.createdAt>=:from AND s.createdAt<:to")
     fun observeGrossProfit(from: Long, to: Long): Flow<Long>
 
+    @Query("""
+        SELECT
+            (SELECT COALESCE(SUM(total),0) FROM sales_invoices WHERE status='POSTED' AND createdAt>=:from AND createdAt<:to) AS sales,
+            (SELECT COALESCE(SUM(total),0) FROM purchase_invoices WHERE status='POSTED' AND createdAt>=:from AND createdAt<:to) AS purchases,
+            (SELECT COALESCE(SUM(si.lineTotal - ((si.unitCostSnapshot * si.quantityMilli + 500) / 1000) - CASE WHEN s.subtotal>0 THEN ((s.discount * si.lineTotal + s.subtotal / 2) / s.subtotal) ELSE 0 END),0) FROM sales_invoice_items si INNER JOIN sales_invoices s ON s.id=si.invoiceId WHERE s.status='POSTED' AND s.createdAt>=:from AND s.createdAt<:to) AS grossProfit,
+            (SELECT COUNT(*) FROM sales_invoices WHERE status='POSTED' AND createdAt>=:from AND createdAt<:to) AS salesInvoices,
+            (SELECT COALESCE(SUM(total),0) FROM returns WHERE returnType='SALE' AND createdAt>=:from AND createdAt<:to) AS salesReturns,
+            (SELECT COALESCE(SUM(total),0) FROM returns WHERE returnType='PURCHASE' AND createdAt>=:from AND createdAt<:to) AS purchaseReturns,
+            (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE createdAt>=:from AND createdAt<:to) AS expenses
+    """)
+    fun observeFinancialSummary(from: Long, to: Long): Flow<FinancialReportSummary>
+
     @Query("UPDATE sales_invoices SET status=:status WHERE id=:id AND status='POSTED'")
     suspend fun changePostedStatus(id: String, status: String): Int
 }
