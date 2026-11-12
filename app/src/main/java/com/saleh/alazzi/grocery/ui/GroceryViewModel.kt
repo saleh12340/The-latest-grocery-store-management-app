@@ -362,19 +362,19 @@ class GroceryViewModel(
     fun purchaseInvoice(id: String) = database.purchaseInvoices().observeById(id)
     fun purchaseInvoiceLines(id: String) = database.purchaseInvoices().observeLines(id)
 
-    fun returnSale(invoiceId: String, lines: List<ReturnLineInput>, note: String, operationId: String) {
+    fun returnSale(invoiceId: String, lines: List<ReturnLineInput>, note: String, operationId: String, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             runCatching { repository.returnSale(operationId, invoiceId, lines, note) }
-                .onSuccess { eventChannel.send("تم حفظ مرتجع البيع بقيمة ${it.total}") }
-                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع البيع")) }
+                .onSuccess { eventChannel.send("تم حفظ مرتجع البيع بقيمة ${it.total}"); onComplete(true) }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع البيع")); onComplete(false) }
         }
     }
 
-    fun returnPurchase(invoiceId: String, lines: List<ReturnLineInput>, note: String, operationId: String) {
+    fun returnPurchase(invoiceId: String, lines: List<ReturnLineInput>, note: String, operationId: String, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             runCatching { repository.returnPurchase(operationId, invoiceId, lines, note) }
-                .onSuccess { eventChannel.send("تم حفظ مرتجع الشراء بقيمة ${it.total}") }
-                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع الشراء")) }
+                .onSuccess { eventChannel.send("تم حفظ مرتجع الشراء بقيمة ${it.total}"); onComplete(true) }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع الشراء")); onComplete(false) }
         }
     }
 
