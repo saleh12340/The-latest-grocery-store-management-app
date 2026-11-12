@@ -40,14 +40,14 @@
 
 ## البناء والتحقق
 
-المتطلبات: JDK 17 وAndroid SDK 36.
+المتطلبات: JDK 17 وAndroid SDK 36 وGradle 9.5.0 (لا يتضمن المستودع حالياً ملفات Gradle Wrapper التنفيذية).
 
 من جذر المستودع:
 
 ```bash
-./gradlew testDebugUnitTest
-./gradlew compileDebugAndroidTestKotlin
-./gradlew assembleDebug
+gradle testDebugUnitTest
+gradle compileDebugAndroidTestKotlin
+gradle assembleDebug
 ```
 
 يعمل GitHub Actions تلقائياً عند الدفع إلى `main`، وينفذ اختبارات الوحدة، ويتحقق من ترجمة اختبارات Android، ثم يبني APK ويحسب SHA-256 ويرفع ملف البناء كـ Artifact لمدة 14 يوماً.
