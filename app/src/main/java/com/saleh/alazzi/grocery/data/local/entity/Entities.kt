@@ -102,6 +102,7 @@ data class SalesInvoiceItemEntity(
     val itemNameSnapshot: String,
     val quantityMilli: Long,
     val unitPrice: Long,
+    val unitCostSnapshot: Long,
     val lineTotal: Long
 )
 
