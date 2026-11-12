@@ -133,6 +133,17 @@ class GroceryRepositoryDatabaseTest {
         assertEquals(100L, returned.total)
         assertEquals(4_000L, database.items().findById("item-1")!!.quantityMilli)
         assertEquals(100L, database.customers().findById("customer-1")!!.balance)
+
+        val retry = repository.returnSale(
+            operationId = "sale-return-1",
+            invoiceId = sale.invoiceId,
+            lines = listOf(ReturnLineInput(originalLine.id, 1_000)),
+            createdAt = now + 2
+        )
+        assertEquals(true, retry.wasDuplicate)
+        assertEquals(4_000L, database.items().findById("item-1")!!.quantityMilli)
+        assertEquals(100L, database.customers().findById("customer-1")!!.balance)
+        assertEquals(1, database.returns().observeForInvoice(sale.invoiceId).first().size)
     }
 
     @Test
