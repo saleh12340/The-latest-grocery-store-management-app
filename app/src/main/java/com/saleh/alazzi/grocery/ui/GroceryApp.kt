@@ -108,6 +108,7 @@ private object Routes {
     const val TRANSFERS = "transfers"
     const val BACKUP = "backup"
     const val USERS = "users"
+    const val SETTINGS = "settings"
     const val INVOICES = "invoices"
     const val SALES_HISTORY = "sales-history"
     const val PURCHASE_HISTORY = "purchase-history"
@@ -135,6 +136,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
     val transfers by viewModel.transfers.collectAsState()
     val notes by viewModel.notes.collectAsState()
     val users by viewModel.users.collectAsState()
+    val storeSettings by viewModel.storeSettings.collectAsState()
     val session by viewModel.session.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
@@ -239,6 +241,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
             composable(Routes.TRANSFERS) { if (session?.role == "MANAGER") TransfersScreen(transfers, viewModel) else EmptyState("غير مصرح", "الحوالات للمدير فقط") }
             composable(Routes.BACKUP) { if (session?.role == "MANAGER") BackupScreen(backupManager) else EmptyState("غير مصرح", "النسخ الاحتياطي للمدير فقط") }
             composable(Routes.USERS) { if (session?.role == "MANAGER") UsersScreen(users, viewModel) else EmptyState("غير مصرح", "إدارة المستخدمين للمدير فقط") }
+            composable(Routes.SETTINGS) { if (session?.role == "MANAGER") StoreSettingsScreen(storeSettings, viewModel) else EmptyState("غير مصرح", "إعدادات المتجر للمدير فقط") }
         }
     }
 }
@@ -332,6 +335,7 @@ private fun HomeScreen(
             }
             item { ActionCard("النسخ الاحتياطي والاستعادة", Icons.Default.AccountBalance, Modifier.fillMaxWidth()) { onNavigate(Routes.BACKUP) } }
             item { ActionCard("إدارة المستخدمين", Icons.Default.People, Modifier.fillMaxWidth()) { onNavigate(Routes.USERS) } }
+            item { ActionCard("إعدادات المتجر", Icons.Default.Store, Modifier.fillMaxWidth()) { onNavigate(Routes.SETTINGS) } }
         }
         item { ActionCard("الطباعة الحرارية", Icons.Default.ReceiptLong, Modifier.fillMaxWidth()) { onNavigate(Routes.PRINTER) } }
         item { Spacer(Modifier.height(8.dp)) }
@@ -1518,6 +1522,86 @@ private fun ReturnDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
+}
+
+@Composable
+private fun StoreSettingsScreen(
+    settings: List<com.saleh.alazzi.grocery.data.local.entity.AppSettingEntity>,
+    viewModel: GroceryViewModel
+) {
+    val stored = settings.associate { it.key to it.value }
+    var storeName by rememberSaveable { mutableStateOf("بقالة العزي للمواد الغذائية") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var address by rememberSaveable { mutableStateOf("") }
+    var footer by rememberSaveable { mutableStateOf("") }
+
+    LaunchedEffect(settings) {
+        if (settings.isNotEmpty()) {
+            storeName = stored["store_name"] ?: "بقالة العزي للمواد الغذائية"
+            phone = stored["store_phone"].orEmpty()
+            address = stored["store_address"].orEmpty()
+            footer = stored["receipt_footer"].orEmpty()
+        }
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("إعدادات المتجر", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "احفظ بيانات تعريف المتجر لاستخدامها في مراحل ربط الفواتير والإيصالات.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = storeName,
+                onValueChange = { storeName = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("اسم المتجر") },
+                singleLine = true
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = phone,
+                onValueChange = { phone = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("رقم الهاتف") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("العنوان") },
+                singleLine = true
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = footer,
+                onValueChange = { footer = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("عبارة أسفل الإيصال") },
+                minLines = 2
+            )
+        }
+        item {
+            Button(
+                onClick = { viewModel.saveStoreSettings(storeName, phone, address, footer) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = storeName.isNotBlank()
+            ) {
+                Text("حفظ إعدادات المتجر")
+            }
+        }
+    }
 }
 
 @Composable
