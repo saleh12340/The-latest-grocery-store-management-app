@@ -120,7 +120,7 @@ class GroceryViewModel(
                 val cleanBarcode = barcode.trim().ifBlank { null }
                 require(database.items().duplicateCount(cleanName, cleanBarcode) == 0) { "الصنف أو الباركود مسجل مسبقاً" }
                 val now = System.currentTimeMillis()
-                val quantityMilli/ = (quantity.toBigDecimalOrNull() ?: error("الكمية غير صحيحة"))
+                val quantityMilli = (quantity.toBigDecimalOrNull() ?: error("الكمية غير صحيحة"))
                     .multiply(java.math.BigDecimal("1000")).longValueExact()
                 val buy = purchasePrice.toLongOrNull() ?: error("سعر الشراء غير صحيح")
                 val sell = salePrice.toLongOrNull() ?: error("سعر البيع غير صحيح")
@@ -298,7 +298,7 @@ class GroceryViewModel(
                 PinHasher.verify(pin.toCharArray(), PinCredential(user.pinSalt, user.pinHash))
             if (valid) {
                 _session.value = user
-                eventChannel.send("مرحباً \${user!!.displayName}")
+                eventChannel.send("مرحباً ${user!!.displayName}")
             } else {
                 eventChannel.send("اسم المستخدم أو PIN غير صحيح")
             }
