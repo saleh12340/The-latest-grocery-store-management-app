@@ -45,4 +45,14 @@ object MoneyMath {
         require(reduction <= current) { "Reduction exceeds balance" }
         return Math.subtractExact(current, reduction)
     }
+    fun weightedAverageCost(oldQuantityMilli: Long, oldUnitCost: Long, newQuantityMilli: Long, newUnitCost: Long): Long {
+        require(oldQuantityMilli >= 0 && newQuantityMilli > 0)
+        require(oldUnitCost >= 0 && newUnitCost >= 0)
+        val oldValue = BigInteger.valueOf(oldQuantityMilli).multiply(BigInteger.valueOf(oldUnitCost))
+        val newValue = BigInteger.valueOf(newQuantityMilli).multiply(BigInteger.valueOf(newUnitCost))
+        val quantity = BigInteger.valueOf(Math.addExact(oldQuantityMilli, newQuantityMilli))
+        return oldValue.add(newValue).add(quantity.divide(BigInteger.TWO))
+            .divide(quantity).longValueExact()
+    }
+
 }
