@@ -58,6 +58,8 @@ interface SalesInvoiceDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertLines(lines: List<SalesInvoiceItemEntity>)
     @Query("SELECT * FROM sales_invoices WHERE id=:id LIMIT 1")
     suspend fun findById(id: String): SalesInvoiceEntity?
+    @Query("SELECT * FROM sales_invoices WHERE operationId=:operationId LIMIT 1")
+    suspend fun findByOperationId(operationId: String): SalesInvoiceEntity?
     @Query("SELECT * FROM sales_invoices ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
     fun observePage(limit: Int, offset: Int): Flow<List<SalesInvoiceEntity>>
     @Query("SELECT * FROM sales_invoice_items WHERE invoiceId=:invoiceId")
@@ -76,6 +78,8 @@ interface PurchaseInvoiceDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertLines(lines: List<PurchaseInvoiceItemEntity>)
     @Query("SELECT * FROM purchase_invoices ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
     fun observePage(limit: Int, offset: Int): Flow<List<PurchaseInvoiceEntity>>
+    @Query("SELECT * FROM purchase_invoices WHERE operationId=:operationId LIMIT 1")
+    suspend fun findByOperationId(operationId: String): PurchaseInvoiceEntity?
     @Query("SELECT * FROM purchase_invoice_items WHERE invoiceId=:invoiceId")
     suspend fun lines(invoiceId: String): List<PurchaseInvoiceItemEntity>
     @Query("SELECT COALESCE(MAX(CAST(invoiceNumber AS INTEGER)), 0) FROM purchase_invoices")
