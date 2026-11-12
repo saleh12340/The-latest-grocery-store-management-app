@@ -104,6 +104,7 @@ private object Routes {
     const val EXPENSES = "expenses"
     const val TRANSFERS = "transfers"
     const val BACKUP = "backup"
+    const val USERS = "users"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,12 +123,17 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
     val expenses by viewModel.expenses.collectAsState()
     val transfers by viewModel.transfers.collectAsState()
     val notes by viewModel.notes.collectAsState()
+    val users by viewModel.users.collectAsState()
+    val session by viewModel.session.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.events.collect { snackbar.showSnackbar(it) }
     }
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route ?: Routes.HOME
+
+    if (users.isEmpty()) { AdminSetupScreen(viewModel); return }
+    if (session == null) { LoginScreen(viewModel); return }
 
     Scaffold(
         topBar = {
@@ -137,7 +143,8 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
                         Text("بقالة العزي للمواد الغذائية", fontWeight = FontWeight.Bold)
                         Text("نظام الإدارة والمحاسبة", style = MaterialTheme.typography.labelSmall)
                     }
-                }
+                },
+                actions = { TextButton(onClick = { viewModel.logout() }) { Text("خروج") } }
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -178,6 +185,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
                     purchasesToday = purchasesToday,
                     invoicesToday = invoicesToday,
                     grossProfitToday = grossProfitToday,
+                    isManager = session?.role == "MANAGER",
                     onNavigate = { nav.navigate(it) }
                 )
             }
@@ -200,6 +208,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
             composable(Routes.EXPENSES) { ExpensesScreen(expenses, viewModel) }
             composable(Routes.TRANSFERS) { TransfersScreen(transfers, viewModel) }
             composable(Routes.BACKUP) { BackupScreen(backupManager) }
+            composable(Routes.USERS) { UsersScreen(users, viewModel) }
         }
     }
 }
@@ -215,6 +224,7 @@ private fun HomeScreen(
     purchasesToday: Long,
     invoicesToday: Long,
     grossProfitToday: Long,
+    isManager: Boolean,
     onNavigate: (String) -> Unit
 ) {
     LazyColumn(
@@ -282,13 +292,16 @@ private fun HomeScreen(
                 ActionCard("الملاحظات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.NOTES) }
             }
         }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ActionCard("المصروفات", Icons.Default.AccountBalance, Modifier.weight(1f)) { onNavigate(Routes.EXPENSES) }
-                ActionCard("الحوالات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.TRANSFERS) }
+        if (isManager) {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionCard("المصروفات", Icons.Default.AccountBalance, Modifier.weight(1f)) { onNavigate(Routes.EXPENSES) }
+                    ActionCard("الحوالات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.TRANSFERS) }
+                }
             }
+            item { ActionCard("النسخ الاحتياطي والاستعادة", Icons.Default.AccountBalance, Modifier.fillMaxWidth()) { onNavigate(Routes.BACKUP) } }
+            item { ActionCard("إدارة المستخدمين", Icons.Default.People, Modifier.fillMaxWidth()) { onNavigate(Routes.USERS) } }
         }
-        item { ActionCard("النسخ الاحتياطي والاستعادة", Icons.Default.AccountBalance, Modifier.fillMaxWidth()) { onNavigate(Routes.BACKUP) } }
         item { ActionCard("الطباعة الحرارية", Icons.Default.ReceiptLong, Modifier.fillMaxWidth()) { onNavigate(Routes.PRINTER) } }
         item { Spacer(Modifier.height(8.dp)) }
     }
@@ -1089,6 +1102,88 @@ private fun BackupScreen(manager: GroceryBackupManager) {
             dismissButton = {
                 TextButton(onClick = { showConfirm = false; restoreUri = null }) { Text("إلغاء") }
             }
+        )
+    }
+}
+
+
+@Composable
+private fun AdminSetupScreen(viewModel: GroceryViewModel) {
+    var displayName by rememberSaveable { mutableStateOf("") }
+    var pin by rememberSaveable { mutableStateOf("") }
+    var confirm by rememberSaveable { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+        Text("إعداد مدير النظام", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("هذه أول مرة يفتح فيها التطبيق. أنشئ PIN للمدير لحماية البيانات والعمليات.")
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(displayName, { displayName = it }, label = { Text("اسم المدير") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(pin, { pin = it }, label = { Text("PIN من 4 إلى 8 أرقام") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+        OutlinedTextField(confirm, { confirm = it }, label = { Text("تأكيد PIN") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+        Button(
+            onClick = { if (pin == confirm) viewModel.createAdminUser(displayName, pin) },
+            enabled = displayName.isNotBlank() && pin.length in 4..8 && pin.all(Char::isDigit) && pin == confirm,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+        ) { Text("إنشاء حساب المدير") }
+    }
+}
+
+@Composable
+private fun LoginScreen(viewModel: GroceryViewModel) {
+    var username by rememberSaveable { mutableStateOf("admin") }
+    var pin by rememberSaveable { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+        Text("تسجيل الدخول", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("بقالة العزي للمواد الغذائية")
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(username, { username = it }, label = { Text("اسم المستخدم") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(pin, { pin = it }, label = { Text("PIN") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+        Button(onClick = { viewModel.login(username, pin); pin = "" }, enabled = username.isNotBlank() && pin.isNotBlank(), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Text("دخول")
+        }
+    }
+}
+
+@Composable
+private fun UsersScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.UserEntity>, viewModel: GroceryViewModel) {
+    var showAdd by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("إدارة المستخدمين", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Button(onClick = { showAdd = true }) { Text("إضافة كاشير") }
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { user ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text(user.displayName, fontWeight = FontWeight.Bold)
+                        Text(user.username)
+                        Text(if (user.role == "MANAGER") "مدير" else "كاشير")
+                    }
+                }
+            }
+        }
+    }
+    if (showAdd) {
+        var displayName by remember { mutableStateOf("") }
+        var username by remember { mutableStateOf("") }
+        var pin by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("إنشاء حساب كاشير") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(displayName, { displayName = it }, label = { Text("اسم الكاشير") }, singleLine = true)
+                    OutlinedTextField(username, { username = it }, label = { Text("اسم المستخدم") }, singleLine = true)
+                    OutlinedTextField(pin, { pin = it }, label = { Text("PIN من 4 إلى 8 أرقام") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.addCashier(displayName, username, pin)
+                    showAdd = false
+                }, enabled = displayName.isNotBlank() && username.isNotBlank() && pin.length in 4..8 && pin.all(Char::isDigit)) { Text("حفظ") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("إلغاء") } }
         )
     }
 }
