@@ -3,80 +3,47 @@ package com.saleh.alazzi.grocery
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.lifecycle.ViewModelProvider
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.Color
+import com.saleh.alazzi.grocery.data.local.GroceryDatabase
+import com.saleh.alazzi.grocery.data.repository.GroceryRepository
+import com.saleh.alazzi.grocery.ui.GroceryApp
+import com.saleh.alazzi.grocery.ui.GroceryViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val database = GroceryDatabase.getInstance(applicationContext)
+        val repository = GroceryRepository(database)
+        val viewModel = ViewModelProvider(
+            this,
+            GroceryViewModel.Factory(database, repository)
+        )[GroceryViewModel::class.java]
+
         setContent {
             val colors = lightColorScheme(
-                primary = androidx.compose.ui.graphics.Color(0xFF155E9B),
-                secondary = androidx.compose.ui.graphics.Color(0xFF16804A),
-                error = androidx.compose.ui.graphics.Color(0xFFB42318),
-                background = androidx.compose.ui.graphics.Color(0xFFF4F6F8),
-                surface = androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+                primary = Color(0xFF155E9B),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFDCEBFA),
+                onPrimaryContainer = Color(0xFF123B5A),
+                secondary = Color(0xFF16804A),
+                error = Color(0xFFB42318),
+                background = Color(0xFFF3F5F7),
+                surface = Color(0xFFFFFFFF),
+                onSurface = Color(0xFF182230),
+                onSurfaceVariant = Color(0xFF475467)
             )
             MaterialTheme(colorScheme = colors) {
-                androidx.compose.runtime.CompositionLocalProvider(
-                    LocalLayoutDirection provides LayoutDirection.Rtl
-                ) {
-                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        WelcomeScreen()
-                    }
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    GroceryApp(viewModel)
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun WelcomeScreen() {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "بقالة العزي للمواد الغذائية",
-            fontSize = 25.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = "نظام إدارة المبيعات والمشتريات والمخزون والحسابات",
-            modifier = Modifier.padding(top = 12.dp),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Button(
-            onClick = { },
-            modifier = Modifier.fillMaxWidth().padding(top = 28.dp),
-            contentPadding = PaddingValues(16.dp)
-        ) {
-            Text("بدء إعداد النظام")
-        }
-        Text(
-            text = "نسخة تأسيسية — لا تُستخدم تجارياً قبل استكمال الوحدات والاختبارات",
-            modifier = Modifier.padding(top = 18.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error
-        )
     }
 }
