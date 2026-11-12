@@ -105,7 +105,7 @@ class GroceryViewModel(
         }
     }
 
-    fun createSale(input: CreateInvoiceInput) {
+    fun createSale(input: CreateInvoiceInput, onFinished: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             runCatching { repository.createSale(input) }
                 .onSuccess {
@@ -113,12 +113,16 @@ class GroceryViewModel(
                         if (it.wasDuplicate) "هذه الفاتورة محفوظة مسبقاً: ${it.invoiceNumber}"
                         else "تم حفظ فاتورة البيع رقم ${it.invoiceNumber}"
                     )
+                    onFinished(true)
                 }
-                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ فاتورة البيع")) }
+                .onFailure {
+                    eventChannel.send(messageFor(it, "تعذر حفظ فاتورة البيع"))
+                    onFinished(false)
+                }
         }
     }
 
-    fun createPurchase(input: CreateInvoiceInput) {
+    fun createPurchase(input: CreateInvoiceInput, onFinished: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             runCatching { repository.createPurchase(input) }
                 .onSuccess {
@@ -126,8 +130,12 @@ class GroceryViewModel(
                         if (it.wasDuplicate) "فاتورة الشراء محفوظة مسبقاً: ${it.invoiceNumber}"
                         else "تم حفظ فاتورة الشراء رقم ${it.invoiceNumber}"
                     )
+                    onFinished(true)
                 }
-                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ فاتورة الشراء")) }
+                .onFailure {
+                    eventChannel.send(messageFor(it, "تعذر حفظ فاتورة الشراء"))
+                    onFinished(false)
+                }
         }
     }
 
