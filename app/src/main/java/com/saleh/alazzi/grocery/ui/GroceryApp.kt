@@ -1,0 +1,523 @@
+package com.saleh.alazzi.grocery.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Store
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
+import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
+import com.saleh.alazzi.grocery.data.local.entity.SupplierEntity
+import com.saleh.alazzi.grocery.data.repository.CreateInvoiceInput
+import com.saleh.alazzi.grocery.data.repository.InvoiceLineInput
+import com.saleh.alazzi.grocery.domain.money.MoneyMath
+import java.math.BigDecimal
+import java.util.UUID
+
+private object Routes {
+    const val HOME = "home"
+    const val CUSTOMERS = "customers"
+    const val SUPPLIERS = "suppliers"
+    const val INVENTORY = "inventory"
+    const val SALE = "sale"
+    const val PURCHASE = "purchase"
+    const val REPORTS = "reports"
+    const val NOTES = "notes"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GroceryApp(viewModel: GroceryViewModel) {
+    val nav = rememberNavController()
+    val customers by viewModel.customers.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsState()
+    val items by viewModel.items.collectAsState()
+    val lowStock by viewModel.lowStockItems.collectAsState()
+    val cash by viewModel.cashBalance.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { snackbar.showSnackbar(it) }
+    }
+    val entry by nav.currentBackStackEntryAsState()
+    val current = entry?.destination?.route ?: Routes.HOME
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("بقالة العزي للمواد الغذائية", fontWeight = FontWeight.Bold)
+                        Text("نظام الإدارة والمحاسبة", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = {
+            NavigationBar {
+                val destinations = listOf(
+                    Triple(Routes.HOME, "الرئيسية", Icons.Default.Home),
+                    Triple(Routes.CUSTOMERS, "العملاء", Icons.Default.People),
+                    Triple(Routes.SUPPLIERS, "الموردون", Icons.Default.Store),
+                    Triple(Routes.INVENTORY, "المخزون", Icons.Default.Inventory2)
+                )
+                destinations.forEach { (route, label, icon) ->
+                    NavigationBarItem(
+                        selected = current == route,
+                        onClick = {
+                            nav.navigate(route) {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(icon, contentDescription = label) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        NavHost(navController = nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
+            composable(Routes.HOME) {
+                HomeScreen(
+                    customers = customers.size,
+                    suppliers = suppliers.size,
+                    itemCount = items.size,
+                    lowStockCount = lowStock.size,
+                    cashBalance = cash,
+                    onNavigate = { nav.navigate(it) }
+                )
+            }
+            composable(Routes.CUSTOMERS) { CustomerScreen(customers, viewModel) }
+            composable(Routes.SUPPLIERS) { SupplierScreen(suppliers, viewModel) }
+            composable(Routes.INVENTORY) { InventoryScreen(items, lowStock.map { it.id }.toSet(), viewModel) }
+            composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, viewModel) }
+            composable(Routes.PURCHASE) { InvoiceEntryScreen(false, items, customers, suppliers, viewModel) }
+            composable(Routes.REPORTS) { ReportsScreen(cash, customers, suppliers, items, lowStock) }
+            composable(Routes.NOTES) { SimpleInfoScreen("دفتر الملاحظات", "سيتم ربط إدارة الملاحظات بقاعدة البيانات في المرحلة التالية.") }
+        }
+    }
+}
+
+@Composable
+private fun HomeScreen(
+    customers: Int,
+    suppliers: Int,
+    itemCount: Int,
+    lowStockCount: Int,
+    cashBalance: Long,
+    onNavigate: (String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Column(Modifier.padding(top = 16.dp, bottom = 4.dp)) {
+                Text("مرحباً بك", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("إدارة البقالة من مكان واحد", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricCard("رصيد الصندوق", cashBalance.toString(), Color(0xFF155E9B), Modifier.weight(1f))
+                MetricCard("أصناف المخزون", itemCount.toString(), Color(0xFF16804A), Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricCard("العملاء", customers.toString(), Color(0xFF155E9B), Modifier.weight(1f))
+                MetricCard("الموردون", suppliers.toString(), Color(0xFF155E9B), Modifier.weight(1f))
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = if (lowStockCount > 0) Color(0xFFFFF1E8) else MaterialTheme.colorScheme.surface)) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Inventory2, contentDescription = null, tint = if (lowStockCount > 0) Color(0xFFB54708) else MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text("تنبيهات المخزون", fontWeight = FontWeight.Bold)
+                        Text(if (lowStockCount == 0) "لا توجد أصناف تحت حد التنبيه" else "$lowStockCount صنف يحتاج إلى مراجعة")
+                    }
+                    TextButton(onClick = { onNavigate(Routes.INVENTORY) }) { Text("عرض") }
+                }
+            }
+        }
+        item { Text("الإجراءات السريعة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionCard("بيع جديد", Icons.Default.PointOfSale, Modifier.weight(1f)) { onNavigate(Routes.SALE) }
+                ActionCard("شراء جديد", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.PURCHASE) }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionCard("العملاء", Icons.Default.People, Modifier.weight(1f)) { onNavigate(Routes.CUSTOMERS) }
+                ActionCard("الموردون", Icons.Default.Store, Modifier.weight(1f)) { onNavigate(Routes.SUPPLIERS) }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionCard("التقارير", Icons.Default.Assessment, Modifier.weight(1f)) { onNavigate(Routes.REPORTS) }
+                ActionCard("الملاحظات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.NOTES) }
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+@Composable
+private fun MetricCard(label: String, value: String, accent: Color, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = accent)
+        }
+    }
+}
+
+@Composable
+private fun ActionCard(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Card(modifier = modifier.clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(24.dp))
+            Text(label, Modifier.padding(start = 10.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+    }
+}
+
+@Composable
+private fun CustomerScreen(values: List<CustomerEntity>, viewModel: GroceryViewModel) {
+    var showAdd by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("العملاء", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Button(onClick = { showAdd = true }) { Icon(Icons.Default.Add, null); Text("إضافة") }
+        }
+        if (values.isEmpty()) EmptyState("لا يوجد عملاء بعد", "أضف أول عميل للبدء")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { customer ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text(customer.name, fontWeight = FontWeight.Bold)
+                        Text(customer.phone ?: "لا يوجد رقم هاتف", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("الرصيد المستحق: ${customer.balance}", color = if (customer.balance > 0) Color(0xFFB42318) else Color(0xFF16804A))
+                    }
+                }
+            }
+        }
+    }
+    if (showAdd) AddPersonDialog("إضافة عميل", viewModel::addCustomer) { showAdd = false }
+}
+
+@Composable
+private fun SupplierScreen(values: List<SupplierEntity>, viewModel: GroceryViewModel) {
+    var showAdd by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("الموردون", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Button(onClick = { showAdd = true }) { Icon(Icons.Default.Add, null); Text("إضافة") }
+        }
+        if (values.isEmpty()) EmptyState("لا يوجد موردون بعد", "أضف أول مورد للبدء")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { supplier ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text(supplier.name, fontWeight = FontWeight.Bold)
+                        Text(supplier.phone ?: "لا يوجد رقم هاتف", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("المستحق للمورد: ${supplier.balance}", color = if (supplier.balance > 0) Color(0xFFB42318) else Color(0xFF16804A))
+                    }
+                }
+            }
+        }
+    }
+    if (showAdd) AddPersonDialog("إضافة مورد", viewModel::addSupplier) { showAdd = false }
+}
+
+@Composable
+private fun AddPersonDialog(title: String, onSave: (String, String, String, String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("الاسم") }, singleLine = true)
+                OutlinedTextField(phone, { phone = it }, label = { Text("الهاتف") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                OutlinedTextField(address, { address = it }, label = { Text("العنوان") }, singleLine = true)
+                OutlinedTextField(notes, { notes = it }, label = { Text("ملاحظات") })
+            }
+        },
+        confirmButton = { Button(onClick = { onSave(name, phone, address, notes); onDismiss() }) { Text("حفظ") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun InventoryScreen(values: List<ItemEntity>, lowStockIds: Set<String>, viewModel: GroceryViewModel) {
+    var showAdd by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("المخزون والأصناف", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Button(onClick = { showAdd = true }) { Icon(Icons.Default.Add, null); Text("صنف") }
+        }
+        if (values.isEmpty()) EmptyState("المخزون فارغ", "أضف الأصناف والكميات الافتتاحية")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(values, key = { it.id }) { item ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(item.name, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            if (item.id in lowStockIds) Text("مخزون منخفض", color = Color(0xFFB42318), style = MaterialTheme.typography.labelSmall)
+                        }
+                        Text("الكمية: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}")
+                        Text("شراء: ${item.purchasePrice}   بيع: ${item.salePrice}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+    if (showAdd) AddItemDialog(viewModel) { showAdd = false }
+}
+
+@Composable
+private fun AddItemDialog(viewModel: GroceryViewModel, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var barcode by remember { mutableStateOf("") }
+    var quantity by remember { mutableStateOf("0") }
+    var purchase by remember { mutableStateOf("0") }
+    var sale by remember { mutableStateOf("0") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إضافة صنف") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("اسم الصنف") }, singleLine = true)
+                OutlinedTextField(barcode, { barcode = it }, label = { Text("الباركود") }, singleLine = true)
+                OutlinedTextField(quantity, { quantity = it }, label = { Text("الكمية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(purchase, { purchase = it }, label = { Text("سعر الشراء") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(sale, { sale = it }, label = { Text("سعر البيع") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            }
+        },
+        confirmButton = { Button(onClick = { viewModel.addItem(name, barcode, quantity, purchase, sale); onDismiss() }) { Text("حفظ") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun InvoiceEntryScreen(
+    isSale: Boolean,
+    items: List<ItemEntity>,
+    customers: List<CustomerEntity>,
+    suppliers: List<SupplierEntity>,
+    viewModel: GroceryViewModel
+) {
+    var selectedItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
+    var quantity by rememberSaveable { mutableStateOf("1") }
+    var unitPrice by rememberSaveable { mutableStateOf("") }
+    var paid by rememberSaveable { mutableStateOf("0") }
+    var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
+    var saving by remember { mutableStateOf(false) }
+    var accountMenu by remember { mutableStateOf(false) }
+    val selectedItem = items.firstOrNull { it.id == selectedItemId }
+    val accounts = if (isSale) customers.map { it.id to it.name } else suppliers.map { it.id to it.name }
+    val selectedAccountName = accounts.firstOrNull { it.first == selectedAccountId }?.second
+    val quantityMilli = runCatching {
+        BigDecimal(quantity).multiply(BigDecimal("1000")).longValueExact()
+    }.getOrNull()
+    val priceValue = unitPrice.toLongOrNull()
+    val lineTotal = if (quantityMilli != null && priceValue != null && quantityMilli > 0 && priceValue >= 0) {
+        runCatching { MoneyMath.lineTotal(quantityMilli, priceValue) }.getOrNull()
+    } else null
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(if (isSale) "فاتورة بيع جديدة" else "فاتورة شراء جديدة", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(if (isSale) "اختر العميل أو اتركه للبيع النقدي" else "اختر المورد أو اتركه للشراء النقدي", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column {
+            FilledTonalButton(onClick = { accountMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(selectedAccountName ?: if (isSale) "بيع نقدي بدون عميل" else "شراء نقدي بدون مورد")
+            }
+            DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
+                DropdownMenuItem(text = { Text(if (isSale) "بيع نقدي بدون عميل" else "شراء نقدي بدون مورد") }, onClick = { selectedAccountId = null; accountMenu = false })
+                accounts.forEach { (id, name) ->
+                    DropdownMenuItem(text = { Text(name) }, onClick = { selectedAccountId = id; accountMenu = false })
+                }
+            }
+        }
+        Text("الأصناف المتاحة", fontWeight = FontWeight.SemiBold)
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(items, key = { it.id }) { item ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        selectedItemId = item.id
+                        unitPrice = (if (isSale) item.salePrice else item.purchasePrice).toString()
+                    },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selectedItemId == item.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(item.name, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                        Text(if (isSale) item.salePrice.toString() else item.purchasePrice.toString())
+                    }
+                }
+            }
+        }
+        if (selectedItem != null) {
+            Text("الصنف المحدد: ${selectedItem.name}", fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(quantity, { quantity = it }, modifier = Modifier.weight(1f), label = { Text("الكمية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(unitPrice, { unitPrice = it }, modifier = Modifier.weight(1f), label = { Text("سعر الوحدة") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            }
+            Text("الإجمالي: ${lineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            OutlinedTextField(paid, { paid = it }, modifier = Modifier.fillMaxWidth(), label = { Text("المبلغ المدفوع") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        }
+        Button(
+            onClick = {
+                val item = selectedItem
+                val qty = quantityMilli
+                val price = priceValue
+                val total = lineTotal
+                val paidValue = paid.toLongOrNull()
+                if (item != null && qty != null && price != null && total != null && paidValue != null && !saving) {
+                    saving = true
+                    val request = CreateInvoiceInput(
+                        operationId = operationId,
+                        customerOrSupplierId = selectedAccountId,
+                        lines = listOf(InvoiceLineInput(item.id, qty, price)),
+                        paid = paidValue,
+                        paymentMethod = "CASH"
+                    )
+                    val finish: (Boolean) -> Unit = { success ->
+                        saving = false
+                        if (success) {
+                            operationId = UUID.randomUUID().toString()
+                            selectedItemId = null
+                            quantity = "1"
+                            unitPrice = ""
+                            paid = "0"
+                        }
+                    }
+                    if (isSale) viewModel.createSale(request, finish) else viewModel.createPurchase(request, finish)
+                }
+            },
+            enabled = selectedItem != null && lineTotal != null && paid.toLongOrNull() != null && !saving,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (saving) "جارٍ الحفظ..." else "حفظ الفاتورة") }
+    }
+}
+
+@Composable
+private fun ReportsScreen(
+    cash: Long,
+    customers: List<CustomerEntity>,
+    suppliers: List<SupplierEntity>,
+    items: List<ItemEntity>,
+    lowStock: List<ItemEntity>
+) {
+    val customerDebt = customers.sumOf { it.balance }
+    val supplierDue = suppliers.sumOf { it.balance }
+    val stockValue = items.sumOf { item -> item.quantityMilli / 1000L * item.purchasePrice }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Text("ملخص الحسابات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item { ReportRow("رصيد الصندوق", cash) }
+        item { ReportRow("ديون العملاء", customerDebt) }
+        item { ReportRow("مستحقات الموردين", supplierDue) }
+        item { ReportRow("قيمة المخزون التقديرية", stockValue) }
+        item { ReportRow("عدد الأصناف منخفضة المخزون", lowStock.size.toLong()) }
+        item {
+            Text(
+                "هذه مؤشرات أولية مباشرة من قاعدة البيانات. تقارير الأرباح والمبيعات حسب الفترة ستُضاف بعد استكمال احتساب تكلفة البضاعة والمرتجعات.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReportRow(label: String, value: Long) {
+    Card {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.weight(1f))
+            Text(value.toString(), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(title: String, detail: String) {
+    Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, fontWeight = FontWeight.Bold)
+        Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SimpleInfoScreen(title: String, message: String) {
+    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(message)
+    }
+}
