@@ -23,6 +23,7 @@ import com.saleh.alazzi.grocery.data.local.entity.*
         StockMovementEntity::class,
         CashTransactionEntity::class,
         ExpenseEntity::class,
+        TransferEntity::class,
         ReturnEntity::class,
         ReturnItemEntity::class,
         NoteEntity::class,
@@ -44,6 +45,7 @@ abstract class GroceryDatabase : RoomDatabase() {
     abstract fun stock(): StockDao
     abstract fun cash(): CashDao
     abstract fun expenses(): ExpenseDao
+    abstract fun transfers(): TransferDao
     abstract fun references(): ReferenceDao
 
     companion object {
