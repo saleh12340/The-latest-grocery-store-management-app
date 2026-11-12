@@ -139,6 +139,39 @@ class GroceryViewModel(
         }
     }
 
+    fun receiveCustomerPayment(customerId: String, amount: Long, note: String) {
+        viewModelScope.launch {
+            runCatching {
+                repository.receiveCustomerPayment(
+                    operationId = UUID.randomUUID().toString(),
+                    customerId = customerId,
+                    amount = amount,
+                    paymentMethod = "CASH",
+                    note = note
+                )
+            }.onSuccess { eventChannel.send("تم تسجيل قبض العميل وتحديث الصندوق") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر تسجيل القبض")) }
+        }
+    }
+
+    fun paySupplier(supplierId: String, amount: Long, note: String) {
+        viewModelScope.launch {
+            runCatching {
+                repository.paySupplier(
+                    operationId = UUID.randomUUID().toString(),
+                    supplierId = supplierId,
+                    amount = amount,
+                    paymentMethod = "CASH",
+                    note = note
+                )
+            }.onSuccess { eventChannel.send("تم تسجيل دفع المورد وتحديث الصندوق") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر تسجيل الدفع")) }
+        }
+    }
+
+    fun customerTransactions(customerId: String) = database.ledger().observeCustomer(customerId)
+    fun supplierTransactions(supplierId: String) = database.ledger().observeSupplier(supplierId)
+
     private fun messageFor(error: Throwable, fallback: String): String =
         error.message?.takeIf { it.isNotBlank() } ?: fallback
 
