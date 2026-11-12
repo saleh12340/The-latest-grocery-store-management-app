@@ -11,7 +11,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
 import java.util.UUID
+import javax.crypto.Cipher
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
 
 data class BackupPayload(
     val formatVersion: Int,
@@ -40,23 +47,38 @@ data class BackupPayload(
     val backupHistory: List<BackupHistoryEntity>
 )
 
-data class BackupEnvelope(val payload: BackupPayload, val sha256: String)
+data class BackupEnvelope(
+    val formatVersion: Int,
+    val saltBase64: String,
+    val ivBase64: String,
+    val ciphertextBase64: String,
+    val sha256: String
+)
 data class BackupResult(val recordCount: Int, val checksum: String, val preRestoreFile: String? = null)
 
 class GroceryBackupManager(
     private val context: Context,
     private val database: GroceryDatabase
 ) {
-    companion object { const val FORMAT_VERSION = 1 }
-    private val gson: Gson = GsonBuilder().disableHtmlEscaping().create()
+    companion object {
+        const val FORMAT_VERSION = 1
+        private const val PBKDF2_ITERATIONS = 310_000
+        private const val KEY_BITS = 256
+        private const val SALT_BYTES = 16
+        private const val IV_BYTES = 12
+    }
 
-    suspend fun exportTo(uri: Uri): BackupResult = withContext(Dispatchers.IO) {
+    private val gson: Gson = GsonBuilder().disableHtmlEscaping().create()
+    private val random = SecureRandom()
+
+    suspend fun exportTo(uri: Uri, passphrase: String): BackupResult = withContext(Dispatchers.IO) {
+        require(passphrase.length >= 8) { "كلمة مرور النسخة يجب ألا تقل عن 8 أحرف" }
         val payload = readSnapshot()
         val payloadJson = gson.toJson(payload)
         val checksum = sha256(payloadJson)
-        val envelopeJson = gson.toJson(BackupEnvelope(payload, checksum))
+        val envelope = encrypt(payloadJson, passphrase, checksum)
         context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use {
-            it.write(envelopeJson)
+            it.write(gson.toJson(envelope))
         } ?: error("تعذر فتح ملف النسخة الاحتياطية")
         database.references().insertBackup(
             BackupHistoryEntity(
@@ -65,27 +87,31 @@ class GroceryBackupManager(
                 formatVersion = FORMAT_VERSION,
                 checksumSha256 = checksum,
                 createdAt = System.currentTimeMillis(),
-                result = "EXPORTED"
+                result = "EXPORTED_ENCRYPTED"
             )
         )
         BackupResult(countRecords(payload), checksum)
     }
 
-    suspend fun restoreFrom(uri: Uri, confirmed: Boolean): BackupResult = withContext(Dispatchers.IO) {
+    suspend fun restoreFrom(uri: Uri, passphrase: String, confirmed: Boolean): BackupResult = withContext(Dispatchers.IO) {
         require(confirmed) { "يجب تأكيد الاستعادة صراحةً" }
+        require(passphrase.length >= 8) { "أدخل كلمة مرور النسخة الاحتياطية" }
         val json = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
             ?: error("تعذر قراءة ملف النسخة الاحتياطية")
         val envelope = gson.fromJson(json, BackupEnvelope::class.java) ?: error("ملف النسخة غير صالح")
-        val payload = envelope.payload ?: error("بيانات النسخة غير موجودة")
-        require(payload.formatVersion == FORMAT_VERSION) { "إصدار النسخة غير مدعوم: ${payload.formatVersion}" }
-        val calculated = sha256(gson.toJson(payload))
+        require(envelope.formatVersion == FORMAT_VERSION) { "إصدار النسخة غير مدعوم: \${envelope.formatVersion}" }
+        val payloadJson = decrypt(envelope, passphrase)
+        val calculated = sha256(payloadJson)
         require(MessageDigest.isEqual(calculated.toByteArray(), envelope.sha256.toByteArray())) {
             "فشل التحقق من سلامة النسخة الاحتياطية"
         }
+        val payload = gson.fromJson(payloadJson, BackupPayload::class.java) ?: error("بيانات النسخة غير موجودة")
+        require(payload.formatVersion == FORMAT_VERSION) { "مخطط بيانات النسخة غير مدعوم" }
 
-        val preRestore = File(context.filesDir, "pre_restore_${System.currentTimeMillis()}.json")
         val before = readSnapshot()
-        preRestore.writeText(gson.toJson(BackupEnvelope(before, sha256(gson.toJson(before)))), Charsets.UTF_8)
+        val beforeJson = gson.toJson(before)
+        val preRestore = File(context.filesDir, "pre_restore_\${System.currentTimeMillis()}.json")
+        preRestore.writeText(gson.toJson(encrypt(beforeJson, passphrase, sha256(beforeJson))), Charsets.UTF_8)
 
         database.withTransaction {
             clearCurrentData()
@@ -95,9 +121,9 @@ class GroceryBackupManager(
                     id = UUID.randomUUID().toString(),
                     uri = preRestore.absolutePath,
                     formatVersion = FORMAT_VERSION,
-                    checksumSha256 = sha256(gson.toJson(before)),
+                    checksumSha256 = sha256(beforeJson),
                     createdAt = System.currentTimeMillis(),
-                    result = "RESTORE_PREIMAGE"
+                    result = "RESTORE_PREIMAGE_ENCRYPTED"
                 )
             )
             database.references().insertBackup(
@@ -107,11 +133,50 @@ class GroceryBackupManager(
                     formatVersion = FORMAT_VERSION,
                     checksumSha256 = calculated,
                     createdAt = System.currentTimeMillis(),
-                    result = "RESTORED"
+                    result = "RESTORED_ENCRYPTED"
                 )
             )
         }
         BackupResult(countRecords(payload), calculated, preRestore.absolutePath)
+    }
+
+    private fun encrypt(plainText: String, passphrase: String, checksum: String): BackupEnvelope {
+        val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
+        val iv = ByteArray(IV_BYTES).also(random::nextBytes)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, deriveKey(passphrase, salt), GCMParameterSpec(128, iv))
+        val encrypted = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
+        return BackupEnvelope(
+            formatVersion = FORMAT_VERSION,
+            saltBase64 = Base64.getEncoder().encodeToString(salt),
+            ivBase64 = Base64.getEncoder().encodeToString(iv),
+            ciphertextBase64 = Base64.getEncoder().encodeToString(encrypted),
+            sha256 = checksum
+        )
+    }
+
+    private fun decrypt(envelope: BackupEnvelope, passphrase: String): String {
+        return try {
+            val salt = Base64.getDecoder().decode(envelope.saltBase64)
+            val iv = Base64.getDecoder().decode(envelope.ivBase64)
+            val ciphertext = Base64.getDecoder().decode(envelope.ciphertextBase64)
+            require(salt.size == SALT_BYTES && iv.size == IV_BYTES) { "بيانات تشفير النسخة غير صحيحة" }
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, deriveKey(passphrase, salt), GCMParameterSpec(128, iv))
+            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+        } catch (error: Exception) {
+            throw IllegalArgumentException("كلمة المرور غير صحيحة أو ملف النسخة تالف", error)
+        }
+    }
+
+    private fun deriveKey(passphrase: String, salt: ByteArray): SecretKeySpec {
+        val spec = PBEKeySpec(passphrase.toCharArray(), salt, PBKDF2_ITERATIONS, KEY_BITS)
+        return try {
+            val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            SecretKeySpec(bytes, "AES")
+        } finally {
+            spec.clearPassword()
+        }
     }
 
     private suspend fun readSnapshot(): BackupPayload = database.withTransaction {
