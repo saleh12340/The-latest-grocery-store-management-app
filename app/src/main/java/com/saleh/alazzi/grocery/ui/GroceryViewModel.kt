@@ -12,6 +12,7 @@ import com.saleh.alazzi.grocery.security.PinHasher
 import com.saleh.alazzi.grocery.security.PinCredential
 import com.saleh.alazzi.grocery.data.repository.CreateInvoiceInput
 import com.saleh.alazzi.grocery.data.repository.GroceryRepository
+import com.saleh.alazzi.grocery.data.repository.ReturnLineInput
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +58,11 @@ class GroceryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
     val invoicesToday = database.salesInvoices().observeSalesCount(todayRange.first, todayRange.second)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+    val salesInvoices = database.salesInvoices().observePage(200, 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val purchaseInvoices = database.purchaseInvoices().observePage(200, 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val grossProfitToday = database.salesInvoices().observeGrossProfit(todayRange.first, todayRange.second)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
 
@@ -326,6 +332,27 @@ class GroceryViewModel(
                 database.references().insertUser(user)
             }.onSuccess { eventChannel.send("تم إنشاء حساب الكاشير") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر إنشاء حساب الكاشير")) }
+        }
+    }
+
+    fun salesInvoice(id: String) = database.salesInvoices().observeById(id)
+    fun salesInvoiceLines(id: String) = database.salesInvoices().observeLines(id)
+    fun purchaseInvoice(id: String) = database.purchaseInvoices().observeById(id)
+    fun purchaseInvoiceLines(id: String) = database.purchaseInvoices().observeLines(id)
+
+    fun returnSale(invoiceId: String, lines: List<ReturnLineInput>, note: String) {
+        viewModelScope.launch {
+            runCatching { repository.returnSale(UUID.randomUUID().toString(), invoiceId, lines, note) }
+                .onSuccess { eventChannel.send("تم حفظ مرتجع البيع بقيمة \${it.total}") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع البيع")) }
+        }
+    }
+
+    fun returnPurchase(invoiceId: String, lines: List<ReturnLineInput>, note: String) {
+        viewModelScope.launch {
+            runCatching { repository.returnPurchase(UUID.randomUUID().toString(), invoiceId, lines, note) }
+                .onSuccess { eventChannel.send("تم حفظ مرتجع الشراء بقيمة \${it.total}") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع الشراء")) }
         }
     }
 
