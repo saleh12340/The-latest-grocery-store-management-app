@@ -597,6 +597,13 @@ private fun InvoiceEntryScreen(
         }
 
         Text("اختر صنفاً لإضافته", fontWeight = FontWeight.SemiBold)
+        if (!isSale) {
+            Text(
+                "عند حفظ فاتورة الشراء ستُضاف الكميات تلقائياً إلى المخزون وتُحدّث تكلفة الشراء",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         OutlinedTextField(
             value = itemQuery,
             onValueChange = { itemQuery = it },
@@ -619,7 +626,11 @@ private fun InvoiceEntryScreen(
                     Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(item.name, fontWeight = FontWeight.Medium)
-                            Text("المتوفر: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                if (isSale) "المتوفر للبيع: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}"
+                                else "الرصيد الحالي قبل الشراء: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                         Text(if (isSale) item.salePrice.toString() else item.purchasePrice.toString())
                     }
