@@ -1,5 +1,7 @@
 package com.saleh.alazzi.grocery.ui
 
+import android.net.Uri
+import com.saleh.alazzi.grocery.data.backup.GroceryBackupManager
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -101,11 +103,12 @@ private object Routes {
     const val PRINTER = "printer"
     const val EXPENSES = "expenses"
     const val TRANSFERS = "transfers"
+    const val BACKUP = "backup"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GroceryApp(viewModel: GroceryViewModel) {
+fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager) {
     val nav = rememberNavController()
     val customers by viewModel.customers.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
@@ -196,6 +199,7 @@ fun GroceryApp(viewModel: GroceryViewModel) {
             composable(Routes.PRINTER) { PrinterScreen() }
             composable(Routes.EXPENSES) { ExpensesScreen(expenses, viewModel) }
             composable(Routes.TRANSFERS) { TransfersScreen(transfers, viewModel) }
+            composable(Routes.BACKUP) { BackupScreen(backupManager) }
         }
     }
 }
@@ -284,6 +288,7 @@ private fun HomeScreen(
                 ActionCard("الحوالات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.TRANSFERS) }
             }
         }
+        item { ActionCard("النسخ الاحتياطي والاستعادة", Icons.Default.AccountBalance, Modifier.fillMaxWidth()) { onNavigate(Routes.BACKUP) } }
         item { ActionCard("الطباعة الحرارية", Icons.Default.ReceiptLong, Modifier.fillMaxWidth()) { onNavigate(Routes.PRINTER) } }
         item { Spacer(Modifier.height(8.dp)) }
     }
@@ -1002,6 +1007,88 @@ private fun NotesScreen(values: List<com.saleh.alazzi.grocery.data.local.entity.
                 }) { Text("حفظ") }
             },
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("إلغاء") } }
+        )
+    }
+}
+
+
+@Composable
+private fun BackupScreen(manager: GroceryBackupManager) {
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf("احفظ نسخة JSON من بياناتك قبل تحديث الجهاز أو التطبيق.") }
+    var busy by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    var showConfirm by remember { mutableStateOf(false) }
+
+    val createLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) scope.launch {
+            busy = true
+            runCatching { manager.exportTo(uri) }
+                .onSuccess { status = "نجح النسخ الاحتياطي: \${it.recordCount} سجل. SHA-256: \${it.checksum}" }
+                .onFailure { status = it.message ?: "فشل إنشاء النسخة الاحتياطية" }
+            busy = false
+        }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            restoreUri = uri
+            showConfirm = true
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("النسخ الاحتياطي والاستعادة", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("يتم تصدير البيانات في ملف JSON بإصدار مخطط وبصمة SHA-256 للتحقق من سلامته.")
+        Button(
+            enabled = !busy,
+            onClick = { createLauncher.launch("AlAzzi_Backup_\${System.currentTimeMillis()}.json") },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (busy) "جارٍ التنفيذ..." else "إنشاء نسخة احتياطية") }
+        FilledTonalButton(
+            enabled = !busy,
+            onClick = { restoreLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("اختيار نسخة للاستعادة") }
+        Text(
+            status,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            "تنبيه: الاستعادة تستبدل البيانات الحالية بعد التأكيد. ينشئ التطبيق نسخة داخلية قبل الاستعادة، ويتراجع تلقائياً إذا فشلت معاملة قاعدة البيانات.",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+
+    if (showConfirm && restoreUri != null) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false; restoreUri = null },
+            title = { Text("تأكيد استعادة البيانات") },
+            text = { Text("سيتم استبدال بيانات التطبيق الحالية بالبيانات الموجودة في النسخة المحددة. سيتم حفظ نسخة داخلية من البيانات الحالية أولاً. هل تريد المتابعة؟") },
+            confirmButton = {
+                Button(onClick = {
+                    val uri = restoreUri ?: return@Button
+                    showConfirm = false
+                    scope.launch {
+                        busy = true
+                        runCatching { manager.restoreFrom(uri, confirmed = true) }
+                            .onSuccess {
+                                status = "نجحت الاستعادة: \${it.recordCount} سجل. تم حفظ نسخة ما قبل الاستعادة."
+                            }
+                            .onFailure { status = it.message ?: "فشلت الاستعادة ولم يتم اعتماد التغييرات" }
+                        busy = false
+                        restoreUri = null
+                    }
+                }) { Text("تأكيد الاستعادة") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false; restoreUri = null }) { Text("إلغاء") }
+            }
         )
     }
 }
