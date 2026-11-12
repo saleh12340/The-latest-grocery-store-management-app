@@ -1571,10 +1571,3 @@ private fun EmptyState(title: String, detail: String) {
     }
 }
 
-@Composable
-private fun SimpleInfoScreen(title: String, message: String) {
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(message)
-    }
-}
