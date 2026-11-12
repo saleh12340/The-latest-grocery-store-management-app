@@ -130,6 +130,8 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
     val salesReturnsToday by viewModel.salesReturnsToday.collectAsState()
     val purchaseReturnsToday by viewModel.purchaseReturnsToday.collectAsState()
     val expensesToday by viewModel.expensesToday.collectAsState()
+    val reportSummary by viewModel.reportSummary.collectAsState()
+    val reportPeriod by viewModel.reportPeriod.collectAsState()
     val salesInvoices by viewModel.salesInvoices.collectAsState()
     val purchaseInvoices by viewModel.purchaseInvoices.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
@@ -234,7 +236,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
             }
 
             composable(Routes.PURCHASE) { if (session?.role == "MANAGER") InvoiceEntryScreen(false, items, customers, suppliers, storeSettings, viewModel) else EmptyState("غير مصرح", "المشتريات للمدير فقط") }
-            composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock, salesToday, purchasesToday, grossProfitToday, invoicesToday, salesReturnsToday, purchaseReturnsToday, expensesToday) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
+            composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock, reportSummary, reportPeriod, viewModel::setReportPeriod) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
             composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
             composable(Routes.PRINTER) { PrinterScreen() }
             composable(Routes.EXPENSES) { if (session?.role == "MANAGER") ExpensesScreen(expenses, viewModel) else EmptyState("غير مصرح", "المصروفات للمدير فقط") }
@@ -1617,28 +1619,36 @@ private fun ReportsScreen(
     suppliers: List<SupplierEntity>,
     items: List<ItemEntity>,
     lowStock: List<ItemEntity>,
-    salesToday: Long,
-    purchasesToday: Long,
-    grossProfitToday: Long,
-    invoicesToday: Long,
-    salesReturnsToday: Long,
-    purchaseReturnsToday: Long,
-    expensesToday: Long
+    summary: ReportSummary,
+    period: ReportPeriod,
+    onPeriodChange: (ReportPeriod) -> Unit
 ) {
     val customerDebt = customers.sumOf { it.balance }
     val supplierDue = suppliers.sumOf { it.balance }
     val stockValue = items.sumOf { item -> runCatching { MoneyMath.lineTotal(item.quantityMilli, item.purchasePrice) }.getOrDefault(0L) }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("التقارير اليومية", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-        item { ReportRow("إجمالي مبيعات اليوم", salesToday) }
-        item { ReportRow("مرتجعات البيع اليوم", salesReturnsToday) }
-        item { ReportRow("صافي المبيعات بعد المرتجعات", salesToday - salesReturnsToday) }
-        item { ReportRow("إجمالي مشتريات اليوم", purchasesToday) }
-        item { ReportRow("مرتجعات الشراء اليوم", purchaseReturnsToday) }
-        item { ReportRow("صافي المشتريات بعد المرتجعات", purchasesToday - purchaseReturnsToday) }
-        item { ReportRow("الربح الإجمالي التقديري قبل المرتجعات والمصروفات", grossProfitToday) }
-        item { ReportRow("مصروفات اليوم", expensesToday) }
-        item { ReportRow("عدد فواتير البيع اليوم", invoicesToday) }
+        item { Text("التقارير المالية", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReportPeriod.values().forEach { option ->
+                    FilledTonalButton(
+                        onClick = { onPeriodChange(option) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (period == option) "✓ ${option.label}" else option.label)
+                    }
+                }
+            }
+        }
+        item { ReportRow("إجمالي المبيعات", summary.sales) }
+        item { ReportRow("مرتجعات البيع", summary.salesReturns) }
+        item { ReportRow("صافي المبيعات بعد المرتجعات", summary.sales - summary.salesReturns) }
+        item { ReportRow("إجمالي المشتريات", summary.purchases) }
+        item { ReportRow("مرتجعات الشراء", summary.purchaseReturns) }
+        item { ReportRow("صافي المشتريات بعد المرتجعات", summary.purchases - summary.purchaseReturns) }
+        item { ReportRow("الربح الإجمالي التقديري قبل المرتجعات والمصروفات", summary.grossProfit) }
+        item { ReportRow("المصروفات", summary.expenses) }
+        item { ReportRow("عدد فواتير البيع", summary.salesInvoices) }
         item { Text("ملخص الحسابات والمخزون", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         item { ReportRow("رصيد الصندوق", cash) }
         item { ReportRow("ديون العملاء", customerDebt) }
@@ -1647,7 +1657,7 @@ private fun ReportsScreen(
         item { ReportRow("عدد الأصناف منخفضة المخزون", lowStock.size.toLong()) }
         item {
             Text(
-                "الأرقام محسوبة من سجلات اليوم في قاعدة البيانات. الربح المعروض تقديري قبل خصم أثر المرتجعات والمصروفات، ولا يمثل صافي الربح النهائي.",
+                "الفترة المحددة تشمل من بداية اليوم أو الأسبوع أو الشهر حتى الآن. الربح الإجمالي تقديري قبل تسوية تكلفة المرتجعات والمصروفات، ولا يمثل صافي الربح النهائي.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
