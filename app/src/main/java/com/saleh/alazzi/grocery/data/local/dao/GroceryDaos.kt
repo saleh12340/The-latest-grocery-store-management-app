@@ -48,6 +48,8 @@ interface ItemDao {
     fun search(query: String): Flow<List<ItemEntity>>
     @Query("UPDATE items SET quantityMilli=:quantity, updatedAt=:now WHERE id=:id")
     suspend fun setQuantity(id: String, quantity: Long, now: Long): Int
+    @Query("UPDATE items SET quantityMilli=:quantity, purchasePrice=:purchasePrice, updatedAt=:now WHERE id=:id")
+    suspend fun setQuantityAndPurchasePrice(id: String, quantity: Long, purchasePrice: Long, now: Long): Int
     @Query("SELECT * FROM items WHERE isActive=1 AND quantityMilli<=lowStockThresholdMilli ORDER BY quantityMilli ASC")
     fun observeLowStock(): Flow<List<ItemEntity>>
 }
