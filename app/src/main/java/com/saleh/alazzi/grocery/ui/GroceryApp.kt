@@ -228,7 +228,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
             }
 
             composable(Routes.PURCHASE) { if (session?.role == "MANAGER") InvoiceEntryScreen(false, items, customers, suppliers, viewModel) else EmptyState("غير مصرح", "المشتريات للمدير فقط") }
-            composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
+            composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock, salesToday, purchasesToday, grossProfitToday, invoicesToday) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
             composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
             composable(Routes.PRINTER) { PrinterScreen() }
             composable(Routes.EXPENSES) { if (session?.role == "MANAGER") ExpensesScreen(expenses, viewModel) else EmptyState("غير مصرح", "المصروفات للمدير فقط") }
@@ -1506,13 +1506,22 @@ private fun ReportsScreen(
     customers: List<CustomerEntity>,
     suppliers: List<SupplierEntity>,
     items: List<ItemEntity>,
-    lowStock: List<ItemEntity>
+    lowStock: List<ItemEntity>,
+    salesToday: Long,
+    purchasesToday: Long,
+    grossProfitToday: Long,
+    invoicesToday: Long
 ) {
     val customerDebt = customers.sumOf { it.balance }
     val supplierDue = suppliers.sumOf { it.balance }
     val stockValue = items.sumOf { item -> runCatching { MoneyMath.lineTotal(item.quantityMilli, item.purchasePrice) }.getOrDefault(0L) }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("ملخص الحسابات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item { Text("التقارير اليومية", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item { ReportRow("إجمالي مبيعات اليوم", salesToday) }
+        item { ReportRow("إجمالي مشتريات اليوم", purchasesToday) }
+        item { ReportRow("الربح الإجمالي التقديري اليوم", grossProfitToday) }
+        item { ReportRow("عدد فواتير البيع اليوم", invoicesToday) }
+        item { Text("ملخص الحسابات والمخزون", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         item { ReportRow("رصيد الصندوق", cash) }
         item { ReportRow("ديون العملاء", customerDebt) }
         item { ReportRow("مستحقات الموردين", supplierDue) }
