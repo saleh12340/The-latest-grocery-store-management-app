@@ -217,13 +217,30 @@ data class CashTransactionEntity(
     val createdAt: Long
 )
 
-@Entity(tableName = "expenses", indices = [Index("createdAt"), Index("category")])
+@Entity(tableName = "expenses", indices = [Index("createdAt"), Index("category"), Index(value = ["operationId"], unique = true)])
 data class ExpenseEntity(
     @PrimaryKey val id: String,
+    val operationId: String,
     val category: String,
     val amount: Long,
     val paymentMethod: String,
     val description: String? = null,
+    val createdAt: Long
+)
+
+
+@Entity(tableName = "transfers", indices = [Index(value = ["operationId"], unique = true), Index("createdAt"), Index("phone")])
+data class TransferEntity(
+    @PrimaryKey val id: String,
+    val operationId: String,
+    val recipientName: String,
+    val phone: String,
+    val direction: String,
+    val amount: Long,
+    val fees: Long,
+    val netAmount: Long,
+    val status: String,
+    val note: String? = null,
     val createdAt: Long
 )
 
