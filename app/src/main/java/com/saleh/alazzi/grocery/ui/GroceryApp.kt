@@ -1,5 +1,18 @@
 package com.saleh.alazzi.grocery.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
+import com.saleh.alazzi.grocery.printing.BluetoothPrinterClient
+import com.saleh.alazzi.grocery.printing.PairedPrinter
+import com.saleh.alazzi.grocery.printing.ReceiptData
+import com.saleh.alazzi.grocery.printing.ReceiptItem
+import com.saleh.alazzi.grocery.printing.ReceiptRenderer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +96,7 @@ private object Routes {
     const val PURCHASE = "purchase"
     const val REPORTS = "reports"
     const val NOTES = "notes"
+    const val PRINTER = "printer"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -164,6 +178,7 @@ fun GroceryApp(viewModel: GroceryViewModel) {
             composable(Routes.PURCHASE) { InvoiceEntryScreen(false, items, customers, suppliers, viewModel) }
             composable(Routes.REPORTS) { ReportsScreen(cash, customers, suppliers, items, lowStock) }
             composable(Routes.NOTES) { SimpleInfoScreen("دفتر الملاحظات", "سيتم ربط إدارة الملاحظات بقاعدة البيانات في المرحلة التالية.") }
+            composable(Routes.PRINTER) { PrinterScreen() }
         }
     }
 }
@@ -230,6 +245,7 @@ private fun HomeScreen(
                 ActionCard("الملاحظات", Icons.Default.ReceiptLong, Modifier.weight(1f)) { onNavigate(Routes.NOTES) }
             }
         }
+        item { ActionCard("الطباعة الحرارية", Icons.Default.ReceiptLong, Modifier.fillMaxWidth()) { onNavigate(Routes.PRINTER) } }
         item { Spacer(Modifier.height(8.dp)) }
     }
 }
@@ -572,6 +588,120 @@ private fun PaymentDialog(title: String, maxAmount: Long, onSave: (Long, String)
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
+}
+
+
+@Composable
+private fun PrinterScreen() {
+    val context = LocalContext.current
+    val client = remember(context) { BluetoothPrinterClient(context) }
+    val scope = rememberCoroutineScope()
+    var printers by remember { mutableStateOf(emptyList<PairedPrinter>()) }
+    var selectedAddress by rememberSaveable { mutableStateOf<String?>(null) }
+    var paperWidth by rememberSaveable { mutableStateOf(384) }
+    var status by remember { mutableStateOf("اعرض الطابعات المقترنة بالهاتف أولاً") }
+    var busy by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            scope.launch {
+                busy = true
+                runCatching { client.pairedPrinters() }
+                    .onSuccess { found ->
+                        printers = found
+                        if (selectedAddress !in found.map { it.address }) selectedAddress = found.firstOrNull()?.address
+                        status = if (found.isEmpty()) "لا توجد طابعات مقترنة. اربط الطابعة من إعدادات Bluetooth في الهاتف." else "تم العثور على \${found.size} جهاز مقترن"
+                    }
+                    .onFailure { status = it.message ?: "تعذر قراءة أجهزة Bluetooth" }
+                busy = false
+            }
+        } else status = "لم يتم منح إذن Bluetooth"
+    }
+
+    fun loadPrinters() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            scope.launch {
+                busy = true
+                runCatching { client.pairedPrinters() }
+                    .onSuccess { found ->
+                        printers = found
+                        if (selectedAddress !in found.map { it.address }) selectedAddress = found.firstOrNull()?.address
+                        status = if (found.isEmpty()) "لا توجد طابعات مقترنة. اربط الطابعة من إعدادات Bluetooth في الهاتف." else "تم العثور على \${found.size} جهاز مقترن"
+                    }
+                    .onFailure { status = it.message ?: "تعذر قراءة أجهزة Bluetooth" }
+                busy = false
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("الطباعة الحرارية", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("يدعم الاتصال بطابعات ESC/POS المقترنة عبر Bluetooth. لا يبدأ البحث عن أجهزة غير مقترنة.")
+        Button(onClick = { loadPrinters() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Text(if (busy) "جارٍ الفحص..." else "عرض الطابعات المقترنة")
+        }
+        Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("عرض الورق")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = { paperWidth = 384 }) { Text(if (paperWidth == 384) "✓ 58mm" else "58mm") }
+            FilledTonalButton(onClick = { paperWidth = 576 }) { Text(if (paperWidth == 576) "✓ 80mm" else "80mm") }
+        }
+        Text("اختر الطابعة", fontWeight = FontWeight.Bold)
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(printers, key = { it.address }) { printer ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { selectedAddress = printer.address },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selectedAddress == printer.address) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text(printer.name, fontWeight = FontWeight.Bold)
+                        Text(printer.address, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        Button(
+            enabled = selectedAddress != null && !busy,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                val address = selectedAddress ?: return@Button
+                scope.launch {
+                    busy = true
+                    status = "جارٍ إرسال إيصال الاختبار..."
+                    val bitmap = ReceiptRenderer.render(
+                        ReceiptData(
+                            invoiceType = "اختبار الطباعة",
+                            invoiceNumber = "TEST-001",
+                            dateTime = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale("ar")).format(java.util.Date()),
+                            partyName = null,
+                            items = listOf(ReceiptItem("اختبار وضوح العربية", "1", 100, 100)),
+                            subtotal = 100,
+                            discount = 0,
+                            total = 100,
+                            paid = 100,
+                            remaining = 0
+                        ),
+                        paperWidth
+                    )
+                    try {
+                        client.print(bitmap, address, paperWidth)
+                        status = "تم إرسال بيانات الاختبار إلى الطابعة"
+                    } catch (error: Throwable) {
+                        status = error.message ?: "فشلت الطباعة"
+                    } finally {
+                        bitmap.recycle()
+                        busy = false
+                    }
+                }
+            }
+        ) { Text("طباعة إيصال اختبار") }
+    }
 }
 
 @Composable
