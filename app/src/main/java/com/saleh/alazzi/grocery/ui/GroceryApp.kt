@@ -528,6 +528,7 @@ private fun InvoiceEntryScreen(
     val context = LocalContext.current
     val exporter = remember(context) { InvoiceExporter(context) }
     var selectedItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var itemQuery by rememberSaveable { mutableStateOf("") }
     var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var quantity by rememberSaveable { mutableStateOf("1") }
     var unitPrice by rememberSaveable { mutableStateOf("") }
@@ -542,6 +543,9 @@ private fun InvoiceEntryScreen(
     var receiptMessage by remember { mutableStateOf("") }
 
     val selectedItem = items.firstOrNull { it.id == selectedItemId }
+    val filteredItems = if (itemQuery.isBlank()) items else items.filter { item ->
+        item.name.contains(itemQuery.trim(), ignoreCase = true) || (item.barcode?.contains(itemQuery.trim(), ignoreCase = true) == true)
+    }
     val accounts = if (isSale) customers.map { it.id to it.name } else suppliers.map { it.id to it.name }
     val selectedAccountName = accounts.firstOrNull { it.first == selectedAccountId }?.second
     val quantityMilli = runCatching { BigDecimal(quantity).multiply(BigDecimal("1000")).longValueExact() }.getOrNull()
@@ -568,8 +572,16 @@ private fun InvoiceEntryScreen(
         }
 
         Text("اختر صنفاً لإضافته", fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(
+            value = itemQuery,
+            onValueChange = { itemQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("بحث باسم الصنف أو الباركود") },
+            singleLine = true
+        )
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(items, key = { it.id }) { item ->
+            if (filteredItems.isEmpty()) item { EmptyState("لا توجد أصناف مطابقة", "تحقق من الاسم أو الباركود") }
+            items(filteredItems, key = { it.id }) { item ->
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable {
                         selectedItemId = item.id
