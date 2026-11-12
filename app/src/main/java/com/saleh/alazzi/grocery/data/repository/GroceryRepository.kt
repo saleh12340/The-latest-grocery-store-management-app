@@ -71,6 +71,7 @@ class GroceryRepository(private val database: GroceryDatabase) {
                     itemNameSnapshot = item.name,
                     quantityMilli = line.quantityMilli,
                     unitPrice = line.unitPrice,
+                    unitCostSnapshot = item.purchasePrice,
                     lineTotal = lineTotal
                 )
             }
@@ -242,7 +243,8 @@ class GroceryRepository(private val database: GroceryDatabase) {
             prepared.forEachIndexed { index, (line, item, _) ->
                 val before = item.quantityMilli
                 val after = Math.addExact(before, line.quantityMilli)
-                check(database.items().setQuantity(item.id, after, input.createdAt) == 1)
+                val averageCost = MoneyMath.weightedAverageCost(before, item.purchasePrice, line.quantityMilli, line.unitPrice)
+                check(database.items().setQuantityAndPurchasePrice(item.id, after, averageCost, input.createdAt) == 1)
                 database.stock().insertMovement(
                     StockMovementEntity(
                         id = UUID.randomUUID().toString(),
