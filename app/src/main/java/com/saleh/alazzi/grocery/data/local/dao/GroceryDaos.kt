@@ -85,6 +85,8 @@ interface SalesInvoiceDao {
 @Dao
 interface PurchaseInvoiceDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(invoice: PurchaseInvoiceEntity)
+    @Query("SELECT * FROM purchase_invoices WHERE id=:id LIMIT 1")
+    suspend fun findById(id: String): PurchaseInvoiceEntity?
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertLines(lines: List<PurchaseInvoiceItemEntity>)
     @Query("SELECT * FROM purchase_invoices ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
     fun observePage(limit: Int, offset: Int): Flow<List<PurchaseInvoiceEntity>>
