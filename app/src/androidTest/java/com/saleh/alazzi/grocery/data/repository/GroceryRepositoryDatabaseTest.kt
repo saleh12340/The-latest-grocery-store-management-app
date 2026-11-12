@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.saleh.alazzi.grocery.data.local.GroceryDatabase
 import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
 import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
+import com.saleh.alazzi.grocery.data.local.entity.SupplierEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -33,6 +34,15 @@ class GroceryRepositoryDatabaseTest {
             CustomerEntity(
                 id = "customer-1",
                 name = "عميل اختبار",
+                balance = 0,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        database.suppliers().insert(
+            SupplierEntity(
+                id = "supplier-1",
+                name = "مورد اختبار",
                 balance = 0,
                 createdAt = now,
                 updatedAt = now
@@ -99,4 +109,53 @@ class GroceryRepositoryDatabaseTest {
         assertEquals(0L, database.cash().observeBalance().first())
         assertNotNull(database.customers().findById("customer-1"))
     }
+
+    @Test
+    fun partialSaleReturnRestoresStockAndReducesCustomerDebt() = runBlocking {
+        val sale = repository.createSale(
+            CreateInvoiceInput(
+                operationId = "sale-for-return",
+                customerOrSupplierId = "customer-1",
+                lines = listOf(InvoiceLineInput("item-1", 2_000, 100)),
+                paid = 0,
+                paymentMethod = "CASH",
+                createdAt = now
+            )
+        )
+        val originalLine = database.salesInvoices().lines(sale.invoiceId).single()
+        val returned = repository.returnSale(
+            operationId = "sale-return-1",
+            invoiceId = sale.invoiceId,
+            lines = listOf(ReturnLineInput(originalLine.id, 1_000)),
+            createdAt = now + 1
+        )
+        assertEquals(100L, returned.total)
+        assertEquals(4_000L, database.items().findById("item-1")!!.quantityMilli)
+        assertEquals(100L, database.customers().findById("customer-1")!!.balance)
+    }
+
+    @Test
+    fun purchaseReturnReducesSupplierDebtAndStock() = runBlocking {
+        val purchase = repository.createPurchase(
+            CreateInvoiceInput(
+                operationId = "purchase-for-return",
+                customerOrSupplierId = "supplier-1",
+                lines = listOf(InvoiceLineInput("item-1", 2_000, 80)),
+                paid = 0,
+                paymentMethod = "CASH",
+                createdAt = now
+            )
+        )
+        val originalLine = database.purchaseInvoices().lines(purchase.invoiceId).single()
+        val returned = repository.returnPurchase(
+            operationId = "purchase-return-1",
+            invoiceId = purchase.invoiceId,
+            lines = listOf(ReturnLineInput(originalLine.id, 1_000)),
+            createdAt = now + 1
+        )
+        assertEquals(80L, returned.total)
+        assertEquals(6_000L, database.items().findById("item-1")!!.quantityMilli)
+        assertEquals(80L, database.suppliers().findById("supplier-1")!!.balance)
+    }
+
 }
