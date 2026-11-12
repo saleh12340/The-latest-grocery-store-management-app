@@ -6,6 +6,7 @@ import com.saleh.alazzi.grocery.data.local.GroceryDatabase
 import com.saleh.alazzi.grocery.data.local.entity.CustomerEntity
 import com.saleh.alazzi.grocery.data.local.entity.ItemEntity
 import com.saleh.alazzi.grocery.data.local.entity.SupplierEntity
+import com.saleh.alazzi.grocery.data.local.entity.NoteEntity
 import com.saleh.alazzi.grocery.data.repository.CreateInvoiceInput
 import com.saleh.alazzi.grocery.data.repository.GroceryRepository
 import kotlinx.coroutines.channels.Channel
@@ -32,6 +33,9 @@ class GroceryViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val transfers = database.transfers().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val notes = database.references().observeNotes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
 
     val cashBalance = database.cash().observeBalance()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
@@ -218,6 +222,32 @@ class GroceryViewModel(
                 )
             }.onSuccess { eventChannel.send("تم تسجيل الحوالة وتحديث الصندوق") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر تسجيل الحوالة")) }
+        }
+    }
+
+    fun addNote(title: String, body: String) {
+        viewModelScope.launch {
+            runCatching {
+                require(title.isNotBlank() || body.isNotBlank()) { "اكتب عنوان الملاحظة أو محتواها" }
+                val now = System.currentTimeMillis()
+                database.references().insertNote(
+                    NoteEntity(UUID.randomUUID().toString(), title.trim(), body.trim(), false, now, now)
+                )
+            }.onSuccess { eventChannel.send("تم حفظ الملاحظة") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ الملاحظة")) }
+        }
+    }
+
+    fun toggleNotePin(note: NoteEntity) {
+        viewModelScope.launch {
+            database.references().updateNote(note.copy(isPinned = !note.isPinned, updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    fun deleteNote(id: String) {
+        viewModelScope.launch {
+            database.references().deleteNote(id)
+            eventChannel.send("تم حذف الملاحظة")
         }
     }
 
