@@ -168,6 +168,12 @@ interface ReturnDao {
     suspend fun returnedAmount(invoiceId: String, invoiceItemId: String): Long
     @Query("SELECT * FROM returns WHERE originalInvoiceId=:invoiceId ORDER BY createdAt DESC")
     fun observeForInvoice(invoiceId: String): Flow<List<ReturnEntity>>
+
+    @Query("SELECT COALESCE(SUM(total),0) FROM returns WHERE returnType='SALE' AND createdAt>=:from AND createdAt<:to")
+    fun observeSalesReturnsTotal(from: Long, to: Long): Flow<Long>
+
+    @Query("SELECT COALESCE(SUM(total),0) FROM returns WHERE returnType='PURCHASE' AND createdAt>=:from AND createdAt<:to")
+    fun observePurchaseReturnsTotal(from: Long, to: Long): Flow<Long>
 }
 
 @Dao
@@ -177,6 +183,9 @@ interface ExpenseDao {
     suspend fun findByOperationId(operationId: String): ExpenseEntity?
     @Query("SELECT * FROM expenses ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<ExpenseEntity>>
+
+    @Query("SELECT COALESCE(SUM(amount),0) FROM expenses WHERE createdAt>=:from AND createdAt<:to")
+    fun observeTotal(from: Long, to: Long): Flow<Long>
 }
 
 @Dao
