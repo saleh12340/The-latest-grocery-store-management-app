@@ -211,12 +211,13 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
             composable(Routes.SALE) { InvoiceEntryScreen(true, items, customers, suppliers, viewModel) }
             composable(Routes.INVOICES) {
                 InvoiceHubScreen(
+                    isManager = session?.role == "MANAGER",
                     onSales = { nav.navigate(Routes.SALES_HISTORY) },
                     onPurchases = { nav.navigate(Routes.PURCHASE_HISTORY) }
                 )
             }
             composable(Routes.SALES_HISTORY) { SalesInvoiceHistoryScreen(salesInvoices) { nav.navigate("sales-invoice/$it") } }
-            composable(Routes.PURCHASE_HISTORY) { PurchaseInvoiceHistoryScreen(purchaseInvoices) { nav.navigate("purchase-invoice/$it") } }
+            composable(Routes.PURCHASE_HISTORY) { if (session?.role == "MANAGER") PurchaseInvoiceHistoryScreen(purchaseInvoices) { nav.navigate("purchase-invoice/$it") } else EmptyState("غير مصرح", "فواتير المشتريات للمدير فقط") }
             composable("sales-invoice/{invoiceId}", arguments = listOf(navArgument("invoiceId") { type = NavType.StringType })) { entry ->
                 SalesInvoiceDetailScreen(entry.arguments?.getString("invoiceId").orEmpty(), viewModel) { nav.popBackStack() }
             }
@@ -224,7 +225,7 @@ fun GroceryApp(viewModel: GroceryViewModel, backupManager: GroceryBackupManager)
                 PurchaseInvoiceDetailScreen(entry.arguments?.getString("invoiceId").orEmpty(), viewModel) { nav.popBackStack() }
             }
 
-            composable(Routes.PURCHASE) { InvoiceEntryScreen(false, items, customers, suppliers, viewModel) }
+            composable(Routes.PURCHASE) { if (session?.role == "MANAGER") InvoiceEntryScreen(false, items, customers, suppliers, viewModel) else EmptyState("غير مصرح", "المشتريات للمدير فقط") }
             composable(Routes.REPORTS) { if (session?.role == "MANAGER") ReportsScreen(cash, customers, suppliers, items, lowStock) else EmptyState("غير مصرح", "التقارير للمدير فقط") }
             composable(Routes.NOTES) { NotesScreen(notes, viewModel) }
             composable(Routes.PRINTER) { PrinterScreen() }
@@ -1224,11 +1225,11 @@ private data class ReturnLineUi(
 )
 
 @Composable
-private fun InvoiceHubScreen(onSales: () -> Unit, onPurchases: () -> Unit) {
+private fun InvoiceHubScreen(isManager: Boolean, onSales: () -> Unit, onPurchases: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("الفواتير", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Button(onClick = onSales, modifier = Modifier.fillMaxWidth()) { Text("فواتير المبيعات") }
-        FilledTonalButton(onClick = onPurchases, modifier = Modifier.fillMaxWidth()) { Text("فواتير المشتريات") }
+        if (isManager) FilledTonalButton(onClick = onPurchases, modifier = Modifier.fillMaxWidth()) { Text("فواتير المشتريات") }
     }
 }
 
