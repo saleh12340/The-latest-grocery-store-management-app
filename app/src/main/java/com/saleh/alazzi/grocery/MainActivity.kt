@@ -34,7 +34,6 @@ class MainActivity : ComponentActivity() {
                 background = androidx.compose.ui.graphics.Color(0xFFF4F6F8),
                 surface = androidx.compose.ui.graphics.Color(0xFFFFFFFF)
             )
-            androidx.compose CompositionLocalProvider
             MaterialTheme(colorScheme = colors) {
                 androidx.compose.runtime.CompositionLocalProvider(
                     LocalLayoutDirection provides LayoutDirection.Rtl
