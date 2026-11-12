@@ -475,6 +475,14 @@ private fun AddItemDialog(viewModel: GroceryViewModel, onDismiss: () -> Unit) {
     )
 }
 
+private data class DraftInvoiceLine(
+    val itemId: String,
+    val name: String,
+    val quantityMilli: Long,
+    val unitPrice: Long,
+    val lineTotal: Long
+)
+
 @Composable
 private fun InvoiceEntryScreen(
     isSale: Boolean,
@@ -489,7 +497,9 @@ private fun InvoiceEntryScreen(
     var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var quantity by rememberSaveable { mutableStateOf("1") }
     var unitPrice by rememberSaveable { mutableStateOf("") }
+    var discount by rememberSaveable { mutableStateOf("0") }
     var paid by rememberSaveable { mutableStateOf("0") }
+    var cart by remember { mutableStateOf<List<DraftInvoiceLine>>(emptyList()) }
     var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
     var saving by remember { mutableStateOf(false) }
     var accountMenu by remember { mutableStateOf(false) }
@@ -500,29 +510,30 @@ private fun InvoiceEntryScreen(
     val selectedItem = items.firstOrNull { it.id == selectedItemId }
     val accounts = if (isSale) customers.map { it.id to it.name } else suppliers.map { it.id to it.name }
     val selectedAccountName = accounts.firstOrNull { it.first == selectedAccountId }?.second
-    val quantityMilli = runCatching {
-        BigDecimal(quantity).multiply(BigDecimal("1000")).longValueExact()
-    }.getOrNull()
+    val quantityMilli = runCatching { BigDecimal(quantity).multiply(BigDecimal("1000")).longValueExact() }.getOrNull()
     val priceValue = unitPrice.toLongOrNull()
-    val lineTotal = if (quantityMilli != null && priceValue != null && quantityMilli > 0 && priceValue >= 0) {
+    val draftLineTotal = if (quantityMilli != null && priceValue != null && quantityMilli > 0 && priceValue >= 0) {
         runCatching { MoneyMath.lineTotal(quantityMilli, priceValue) }.getOrNull()
     } else null
+    val subtotal = runCatching { cart.fold(0L) { sum, line -> Math.addExact(sum, line.lineTotal) } }.getOrNull()
+    val discountValue = discount.toLongOrNull()
+    val finalTotal = if (subtotal != null && discountValue != null && discountValue >= 0 && discountValue <= subtotal) {
+        runCatching { MoneyMath.total(listOf(subtotal), discountValue) }.getOrNull()
+    } else null
+    val paidValue = paid.toLongOrNull()
+    val remaining = if (finalTotal != null && paidValue != null && paidValue in 0..finalTotal) finalTotal - paidValue else null
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Text(if (isSale) "فاتورة بيع جديدة" else "فاتورة شراء جديدة", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(if (isSale) "اختر العميل أو اتركه للبيع النقدي" else "اختر المورد أو اتركه للشراء النقدي", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Column {
-            FilledTonalButton(onClick = { accountMenu = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selectedAccountName ?: if (isSale) "بيع نقدي بدون عميل" else "شراء نقدي بدون مورد")
-            }
-            DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
-                DropdownMenuItem(text = { Text(if (isSale) "بيع نقدي بدون عميل" else "شراء نقدي بدون مورد") }, onClick = { selectedAccountId = null; accountMenu = false })
-                accounts.forEach { (id, name) ->
-                    DropdownMenuItem(text = { Text(name) }, onClick = { selectedAccountId = id; accountMenu = false })
-                }
-            }
+        FilledTonalButton(onClick = { accountMenu = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(selectedAccountName ?: if (isSale) "بيع نقدي بدون عميل" else "شراء نقدي بدون مورد")
         }
-        Text("الأصناف المتاحة", fontWeight = FontWeight.SemiBold)
+        DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
+            DropdownMenuItem(text = { Text(if (isSale) "بيع نقدي بدون عميل" else "شراء نقدي بدون مورد") }, onClick = { selectedAccountId = null; accountMenu = false })
+            accounts.forEach { (id, name) -> DropdownMenuItem(text = { Text(name) }, onClick = { selectedAccountId = id; accountMenu = false }) }
+        }
+
+        Text("اختر صنفاً لإضافته", fontWeight = FontWeight.SemiBold)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(items, key = { it.id }) { item ->
                 Card(
@@ -534,86 +545,131 @@ private fun InvoiceEntryScreen(
                         containerColor = if (selectedItemId == item.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                     )
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(item.name, Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                    Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.name, fontWeight = FontWeight.Medium)
+                            Text("المتوفر: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}", style = MaterialTheme.typography.bodySmall)
+                        }
                         Text(if (isSale) item.salePrice.toString() else item.purchasePrice.toString())
                     }
                 }
             }
         }
+
         if (selectedItem != null) {
             Text("الصنف المحدد: ${selectedItem.name}", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(quantity, { quantity = it }, modifier = Modifier.weight(1f), label = { Text("الكمية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 OutlinedTextField(unitPrice, { unitPrice = it }, modifier = Modifier.weight(1f), label = { Text("سعر الوحدة") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             }
-            Text("الإجمالي: ${lineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            OutlinedTextField(paid, { paid = it }, modifier = Modifier.fillMaxWidth(), label = { Text("المبلغ المدفوع") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            Text("إجمالي السطر: ${draftLineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = {
+                    val qty = quantityMilli ?: return@Button
+                    val price = priceValue ?: return@Button
+                    val total = draftLineTotal ?: return@Button
+                    val existing = cart.firstOrNull { it.itemId == selectedItem.id }
+                    cart = if (existing == null) {
+                        cart + DraftInvoiceLine(selectedItem.id, selectedItem.name, qty, price, total)
+                    } else {
+                        val combinedQty = Math.addExact(existing.quantityMilli, qty)
+                        cart.map {
+                            if (it.itemId == selectedItem.id) it.copy(
+                                quantityMilli = combinedQty,
+                                lineTotal = MoneyMath.lineTotal(combinedQty, existing.unitPrice)
+                            ) else it
+                        }
+                    }
+                    selectedItemId = null
+                    quantity = "1"
+                    unitPrice = ""
+                },
+                enabled = quantityMilli != null && quantityMilli > 0 && priceValue != null && priceValue >= 0 && draftLineTotal != null,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("إضافة الصنف إلى الفاتورة") }
         }
+
+        Text("أصناف الفاتورة: ${cart.size}", fontWeight = FontWeight.Bold)
+        LazyColumn(Modifier.heightIn(max = 118.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            items(cart, key = { it.itemId }) { line ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(line.name, Modifier.weight(1f), maxLines = 1)
+                    Text("${BigDecimal.valueOf(line.quantityMilli, 3).stripTrailingZeros().toPlainString()} × ${line.unitPrice} = ${line.lineTotal}")
+                    TextButton(onClick = { cart = cart.filterNot { it.itemId == line.itemId } }) { Text("حذف") }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(discount, { discount = it }, modifier = Modifier.weight(1f), label = { Text("الخصم") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            OutlinedTextField(paid, { paid = it }, modifier = Modifier.weight(1f), label = { Text("المدفوع") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        }
+        Text("الإجمالي: ${subtotal ?: "—"}    بعد الخصم: ${finalTotal ?: "—"}    المتبقي: ${remaining ?: "—"}", fontWeight = FontWeight.Bold)
         Button(
             onClick = {
-                val item = selectedItem
-                val qty = quantityMilli
-                val price = priceValue
-                val total = lineTotal
-                val paidValue = paid.toLongOrNull()
-                if (item != null && qty != null && price != null && total != null && paidValue != null && !saving) {
-                    saving = true
-                    val partyPhone = if (isSale) customers.firstOrNull { it.id == selectedAccountId }?.phone
-                        else suppliers.firstOrNull { it.id == selectedAccountId }?.phone
-                    val partyName = selectedAccountName
-                    val request = CreateInvoiceInput(
-                        operationId = operationId,
-                        customerOrSupplierId = selectedAccountId,
-                        lines = listOf(InvoiceLineInput(item.id, qty, price)),
-                        paid = paidValue,
-                        paymentMethod = "CASH"
-                    )
-                    val finish: (Boolean) -> Unit = { success ->
-                        saving = false
-                        if (success) {
-                            operationId = UUID.randomUUID().toString()
-                            selectedItemId = null
-                            quantity = "1"
-                            unitPrice = ""
-                            paid = "0"
-                        }
+                val sub = subtotal ?: return@Button
+                val disc = discountValue ?: return@Button
+                val total = finalTotal ?: return@Button
+                val paidNow = paidValue ?: return@Button
+                val remainingNow = remaining ?: return@Button
+                if (cart.isEmpty() || saving) return@Button
+                saving = true
+                val cartSnapshot = cart.toList()
+                val partyPhone = if (isSale) customers.firstOrNull { it.id == selectedAccountId }?.phone
+                    else suppliers.firstOrNull { it.id == selectedAccountId }?.phone
+                val partyName = selectedAccountName
+                val request = CreateInvoiceInput(
+                    operationId = operationId,
+                    customerOrSupplierId = selectedAccountId,
+                    lines = cartSnapshot.map { InvoiceLineInput(it.itemId, it.quantityMilli, it.unitPrice) },
+                    discount = disc,
+                    paid = paidNow,
+                    paymentMethod = "CASH"
+                )
+                val finish: (Boolean) -> Unit = { success ->
+                    saving = false
+                    if (success) {
+                        operationId = UUID.randomUUID().toString()
+                        selectedItemId = null
+                        quantity = "1"
+                        unitPrice = ""
+                        discount = "0"
+                        paid = "0"
+                        cart = emptyList()
                     }
-                    val saved: (com.saleh.alazzi.grocery.data.repository.SaveInvoiceResult) -> Unit = { result ->
-                        val remaining = total - paidValue
-                        val cumulative = if (selectedAccountId == null) null else {
-                            val previous = if (isSale) customers.firstOrNull { it.id == selectedAccountId }?.balance
-                                else suppliers.firstOrNull { it.id == selectedAccountId }?.balance
-                            (previous ?: 0L) + remaining
-                        }
-                        pendingPhone = partyPhone
-                        pendingReceipt = ReceiptData(
-                            invoiceType = if (isSale) "فاتورة بيع" else "فاتورة شراء",
-                            invoiceNumber = result.invoiceNumber,
-                            dateTime = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale("ar")).format(java.util.Date()),
-                            partyName = partyName,
-                            items = listOf(
-                                ReceiptItem(
-                                    name = item.name,
-                                    quantity = BigDecimal.valueOf(qty, 3).stripTrailingZeros().toPlainString(),
-                                    unitPrice = price,
-                                    total = total
-                                )
-                            ),
-                            subtotal = total,
-                            discount = 0,
-                            total = total,
-                            paid = paidValue,
-                            remaining = remaining,
-                            accountBalance = cumulative
-                        )
-                        receiptMessage = ""
-                    }
-                    if (isSale) viewModel.createSale(request, finish, saved)
-                    else viewModel.createPurchase(request, finish, saved)
                 }
+                val saved: (com.saleh.alazzi.grocery.data.repository.SaveInvoiceResult) -> Unit = { result ->
+                    val cumulative = if (selectedAccountId == null) null else {
+                        val previous = if (isSale) customers.firstOrNull { it.id == selectedAccountId }?.balance
+                            else suppliers.firstOrNull { it.id == selectedAccountId }?.balance
+                        (previous ?: 0L) + remainingNow
+                    }
+                    pendingPhone = partyPhone
+                    pendingReceipt = ReceiptData(
+                        invoiceType = if (isSale) "فاتورة بيع" else "فاتورة شراء",
+                        invoiceNumber = result.invoiceNumber,
+                        dateTime = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale("ar")).format(java.util.Date()),
+                        partyName = partyName,
+                        items = cartSnapshot.map { line ->
+                            ReceiptItem(
+                                name = line.name,
+                                quantity = BigDecimal.valueOf(line.quantityMilli, 3).stripTrailingZeros().toPlainString(),
+                                unitPrice = line.unitPrice,
+                                total = line.lineTotal
+                            )
+                        },
+                        subtotal = sub,
+                        discount = disc,
+                        total = total,
+                        paid = paidNow,
+                        remaining = remainingNow,
+                        accountBalance = cumulative
+                    )
+                    receiptMessage = ""
+                }
+                if (isSale) viewModel.createSale(request, finish, saved)
+                else viewModel.createPurchase(request, finish, saved)
             },
-            enabled = selectedItem != null && lineTotal != null && paid.toLongOrNull() != null && !saving,
+            enabled = cart.isNotEmpty() && finalTotal != null && paidValue != null && paidValue >= 0 && paidValue <= (finalTotal ?: 0L) && !saving,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (saving) "جارٍ الحفظ..." else "حفظ الفاتورة") }
     }
@@ -665,7 +721,7 @@ private fun InvoiceEntryScreen(
                         TextButton(onClick = {
                             runCatching { exporter.openWhatsAppChat(pendingPhone.orEmpty()) }
                                 .onFailure { receiptMessage = it.message ?: "تعذر فتح محادثة WhatsApp" }
-                        }) { Text("فتح محادثة العميل في WhatsApp") }
+                        }) { Text("فتح محادثة WhatsApp") }
                     }
                 }
             },
