@@ -43,14 +43,14 @@ class GroceryBackupManagerTest {
 
     @Test
     fun exportsChecksummedJsonAndRestoresAtomically() = runBlocking {
-        val exported = manager.exportTo(backupUri)
+        val exported = manager.exportTo(backupUri, "correct-horse-battery")
         assertEquals(0, exported.recordCount)
         database.customers().insert(
             CustomerEntity("temporary", "سجل مؤقت", createdAt = 1L, updatedAt = 1L)
         )
         assertNotNull(database.customers().findById("temporary"))
 
-        val restored = manager.restoreFrom(backupUri, confirmed = true)
+        val restored = manager.restoreFrom(backupUri, "correct-horse-battery", confirmed = true)
 
         assertNull(database.customers().findById("temporary"))
         assertNotNull(restored.preRestoreFile)
@@ -59,8 +59,18 @@ class GroceryBackupManagerTest {
 
     @Test
     fun refusesRestoreWithoutExplicitConfirmation() = runBlocking {
-        manager.exportTo(backupUri)
-        val error = runCatching { manager.restoreFrom(backupUri, confirmed = false) }.exceptionOrNull()
+        manager.exportTo(backupUri, "correct-horse-battery")
+        val error = runCatching { manager.restoreFrom(backupUri, "correct-horse-battery", confirmed = false) }.exceptionOrNull()
         assertNotNull(error)
     }
+
+    @Test
+    fun refusesBackupWithWrongPassphrase() = runBlocking {
+        manager.exportTo(backupUri, "correct-horse-battery")
+        val error = runCatching {
+            manager.restoreFrom(backupUri, "incorrect-passphrase", confirmed = true)
+        }.exceptionOrNull()
+        assertNotNull(error)
+    }
+
 }
