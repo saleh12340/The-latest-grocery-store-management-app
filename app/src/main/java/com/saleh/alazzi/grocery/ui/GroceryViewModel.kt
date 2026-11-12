@@ -343,7 +343,7 @@ class GroceryViewModel(
     fun returnSale(invoiceId: String, lines: List<ReturnLineInput>, note: String) {
         viewModelScope.launch {
             runCatching { repository.returnSale(UUID.randomUUID().toString(), invoiceId, lines, note) }
-                .onSuccess { eventChannel.send("تم حفظ مرتجع البيع بقيمة \${it.total}") }
+                .onSuccess { eventChannel.send("تم حفظ مرتجع البيع بقيمة ${it.total}") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع البيع")) }
         }
     }
@@ -351,7 +351,7 @@ class GroceryViewModel(
     fun returnPurchase(invoiceId: String, lines: List<ReturnLineInput>, note: String) {
         viewModelScope.launch {
             runCatching { repository.returnPurchase(UUID.randomUUID().toString(), invoiceId, lines, note) }
-                .onSuccess { eventChannel.send("تم حفظ مرتجع الشراء بقيمة \${it.total}") }
+                .onSuccess { eventChannel.send("تم حفظ مرتجع الشراء بقيمة ${it.total}") }
                 .onFailure { eventChannel.send(messageFor(it, "تعذر حفظ مرتجع الشراء")) }
         }
     }
