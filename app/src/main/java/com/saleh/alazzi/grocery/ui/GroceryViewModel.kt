@@ -273,6 +273,26 @@ class GroceryViewModel(
         }
     }
 
+    fun settleCustomerBalance(customerId: String, note: String, operationId: String) {
+        viewModelScope.launch {
+            runCatching {
+                require(_session.value?.role == "MANAGER") { "تسوية حساب العميل للمدير فقط" }
+                repository.settleCustomerBalance(operationId, customerId, note)
+            }.onSuccess { eventChannel.send("تمت تسوية حساب العميل مع الاحتفاظ بالسجل التاريخي") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر تسوية حساب العميل")) }
+        }
+    }
+
+    fun settleSupplierBalance(supplierId: String, note: String, operationId: String) {
+        viewModelScope.launch {
+            runCatching {
+                require(_session.value?.role == "MANAGER") { "تسوية حساب المورد للمدير فقط" }
+                repository.settleSupplierBalance(operationId, supplierId, note)
+            }.onSuccess { eventChannel.send("تمت تسوية حساب المورد مع الاحتفاظ بالسجل التاريخي") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر تسوية حساب المورد")) }
+        }
+    }
+
     fun addCustomerDebit(customerId: String, amount: Long, note: String, operationId: String) {
         viewModelScope.launch {
             runCatching {
