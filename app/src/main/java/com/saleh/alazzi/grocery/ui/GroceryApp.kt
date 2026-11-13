@@ -1026,23 +1026,30 @@ private fun AccountChargeDialog(title: String, onSave: (Long, String, String) ->
 @Composable
 private fun PaymentDialog(title: String, maxAmount: Long, onSave: (Long, String, String) -> Unit, onDismiss: () -> Unit) {
     var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
-    var amount by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var note by rememberSaveable { mutableStateOf("") }
+    val parsedAmount = parseWholeAmount(amount)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("الرصيد الحالي: $maxAmount")
-                OutlinedTextField(amount, { amount = it }, label = { Text("المبلغ") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch in "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹,٬" } },
+                    label = { Text("المبلغ") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
+                )
                 OutlinedTextField(note, { note = it }, label = { Text("البيان") })
             }
         },
         confirmButton = {
             Button(onClick = {
-                val value = amount.toLongOrNull()
+                val value = parsedAmount
                 if (value != null && value > 0 && value <= maxAmount) onSave(value, note, operationId)
-            }) { Text("حفظ العملية") }
+            }, enabled = parsedAmount != null && parsedAmount > 0 && parsedAmount <= maxAmount) { Text("حفظ العملية") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
