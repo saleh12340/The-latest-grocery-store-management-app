@@ -870,6 +870,7 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
     val transactions by viewModel.customerTransactions(id).collectAsState(initial = emptyList())
     var showPayment by remember { mutableStateOf(false) }
     var showDebit by remember { mutableStateOf(false) }
+    var showSettlement by remember { mutableStateOf(false) }
     if (customer == null) { EmptyState("العميل غير موجود", "قد يكون السجل غير متاح"); return }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(customer.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -879,6 +880,7 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
             Button(onClick = { showPayment = true }, modifier = Modifier.weight(1f)) { Text("قبض من العميل") }
             FilledTonalButton(onClick = { showDebit = true }, modifier = Modifier.weight(1f)) { Text("إضافة دين") }
         }
+        TextButton(onClick = { showSettlement = true }, enabled = customer.balance > 0) { Text("تسوية وتصفير الحساب مع حفظ السجل") }
         Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر الفواتير والدفعات هنا")
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -886,7 +888,7 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
                 Card {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Row {
-                            Text(when (tx.type) { "PAYMENT" -> "تسديد / قبض"; "DEBIT" -> "إضافة دين"; else -> tx.type }, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(when (tx.type) { "PAYMENT" -> "تسديد / قبض"; "DEBIT" -> "إضافة دين"; "SETTLEMENT" -> "تسوية حساب"; else -> tx.type }, Modifier.weight(1f), fontWeight = FontWeight.Bold)
                             Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
                         }
                         Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -896,6 +898,12 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
             }
         }
     }
+    if (showSettlement) AccountSettlementDialog(
+        title = "تسوية حساب العميل",
+        currentBalance = customer.balance,
+        onConfirm = { note, operationId -> viewModel.settleCustomerBalance(id, note, operationId); showSettlement = false },
+        onDismiss = { showSettlement = false }
+    )
     if (showDebit) AccountChargeDialog(
         title = "إضافة دين على العميل",
         onSave = { amount, note, operationId -> viewModel.addCustomerDebit(id, amount, note, operationId); showDebit = false },
@@ -914,6 +922,7 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
     val transactions by viewModel.supplierTransactions(id).collectAsState(initial = emptyList())
     var showPayment by remember { mutableStateOf(false) }
     var showDebit by remember { mutableStateOf(false) }
+    var showSettlement by remember { mutableStateOf(false) }
     if (supplier == null) { EmptyState("المورد غير موجود", "قد يكون السجل غير متاح"); return }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(supplier.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -923,6 +932,7 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
             Button(onClick = { showPayment = true }, modifier = Modifier.weight(1f)) { Text("دفع للمورد") }
             FilledTonalButton(onClick = { showDebit = true }, modifier = Modifier.weight(1f)) { Text("إضافة مستحق") }
         }
+        TextButton(onClick = { showSettlement = true }, enabled = supplier.balance > 0) { Text("تسوية وتصفير الحساب مع حفظ السجل") }
         Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر فواتير الشراء والدفعات هنا")
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -930,7 +940,7 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
                 Card {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Row {
-                            Text(when (tx.type) { "PAYMENT" -> "دفع للمورد"; "DEBIT" -> "إضافة مستحق"; else -> tx.type }, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(when (tx.type) { "PAYMENT" -> "دفع للمورد"; "DEBIT" -> "إضافة مستحق"; "SETTLEMENT" -> "تسوية حساب"; else -> tx.type }, Modifier.weight(1f), fontWeight = FontWeight.Bold)
                             Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
                         }
                         Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -940,6 +950,12 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
             }
         }
     }
+    if (showSettlement) AccountSettlementDialog(
+        title = "تسوية حساب المورد",
+        currentBalance = supplier.balance,
+        onConfirm = { note, operationId -> viewModel.settleSupplierBalance(id, note, operationId); showSettlement = false },
+        onDismiss = { showSettlement = false }
+    )
     if (showDebit) AccountChargeDialog(
         title = "إضافة مستحق للمورد",
         onSave = { amount, note, operationId -> viewModel.addSupplierDebit(id, amount, note, operationId); showDebit = false },
@@ -950,6 +966,30 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
         maxAmount = supplier.balance,
         onSave = { amount, note, operationId -> viewModel.paySupplier(id, amount, note, operationId); showPayment = false },
         onDismiss = { showPayment = false }
+    )
+}
+
+@Composable
+private fun AccountSettlementDialog(
+    title: String,
+    currentBalance: Long,
+    onConfirm: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
+    var note by rememberSaveable { mutableStateOf("تسوية رصيد الحساب") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("الرصيد الحالي: $currentBalance ريال")
+                Text("سيصبح الرصيد صفراً، مع الاحتفاظ بجميع العمليات والفواتير السابقة. لا تُسجل هذه التسوية كقبض أو صرف نقدي.")
+                OutlinedTextField(note, { note = it }, label = { Text("بيان التسوية") })
+            }
+        },
+        confirmButton = { Button(onClick = { onConfirm(note, operationId) }) { Text("تأكيد التسوية") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
