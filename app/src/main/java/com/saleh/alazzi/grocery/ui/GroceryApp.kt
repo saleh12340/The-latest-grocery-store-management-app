@@ -19,6 +19,7 @@ import com.saleh.alazzi.grocery.printing.ReceiptRenderer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -570,6 +571,7 @@ private fun InvoiceEntryScreen(
     val storeProfile = storeSettings.associate { it.key to it.value }
     var selectedItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var itemQuery by rememberSaveable { mutableStateOf("") }
+    var itemMenuExpanded by remember { mutableStateOf(false) }
     var showAddItem by remember { mutableStateOf(false) }
     var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var quantity by rememberSaveable { mutableStateOf("1") }
@@ -614,7 +616,7 @@ private fun InvoiceEntryScreen(
             accounts.forEach { (id, name) -> DropdownMenuItem(text = { Text(name) }, onClick = { selectedAccountId = id; accountMenu = false }) }
         }
 
-        Text("اختر صنفاً لإضافته", fontWeight = FontWeight.SemiBold)
+        Text("إضافة صنف إلى الفاتورة", fontWeight = FontWeight.SemiBold)
         if (!isSale) {
             Text(
                 "عند حفظ فاتورة الشراء ستُضاف الكميات تلقائياً إلى المخزون وتُحدّث تكلفة الشراء",
@@ -622,44 +624,45 @@ private fun InvoiceEntryScreen(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        OutlinedTextField(
-            value = itemQuery,
-            onValueChange = { itemQuery = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("بحث باسم الصنف أو الباركود") },
-            singleLine = true
-        )
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (filteredItems.isEmpty()) item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    EmptyState("لا توجد أصناف مطابقة", "تحقق من الاسم أو الباركود")
-                    if (!isSale) {
-                        TextButton(onClick = { showAddItem = true }) { Text("إضافة صنف جديد إلى المخزون") }
-                    }
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = itemQuery,
+                onValueChange = { itemQuery = it; itemMenuExpanded = it.isNotBlank() },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("ابحث عن الصنف بالاسم أو الباركود") },
+                singleLine = true
+            )
+            DropdownMenu(
+                expanded = itemMenuExpanded && filteredItems.isNotEmpty(),
+                onDismissRequest = { itemMenuExpanded = false },
+                modifier = Modifier.heightIn(max = 240.dp)
+            ) {
+                filteredItems.take(20).forEach { item ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(item.name, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "المتوفر: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}  •  السعر: ${if (isSale) item.salePrice else item.purchasePrice}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        onClick = {
+                            selectedItemId = item.id
+                            itemQuery = item.name
+                            lineTotalInput = ""
+                            itemMenuExpanded = false
+                        }
+                    )
                 }
             }
-            items(filteredItems, key = { it.id }) { item ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        selectedItemId = item.id
-                        lineTotalInput = ""
-                    },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (selectedItemId == item.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(item.name, fontWeight = FontWeight.Medium)
-                            Text(
-                                if (isSale) "المتوفر للبيع: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}"
-                                else "الرصيد الحالي قبل الشراء: ${BigDecimal.valueOf(item.quantityMilli, 3).stripTrailingZeros().toPlainString()}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Text(if (isSale) item.salePrice.toString() else item.purchasePrice.toString())
-                    }
-                }
+        }
+        if (itemQuery.isNotBlank() && filteredItems.isEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("لا يوجد صنف مطابق", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!isSale) TextButton(onClick = { showAddItem = true }) { Text("إضافة صنف جديد") }
             }
         }
 
@@ -715,7 +718,7 @@ private fun InvoiceEntryScreen(
         }
 
         Text("أصناف الفاتورة: ${cart.size}", fontWeight = FontWeight.Bold)
-        LazyColumn(Modifier.heightIn(max = 118.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             items(cart, key = { it.itemId }) { line ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(line.name, Modifier.weight(1f), maxLines = 1)
