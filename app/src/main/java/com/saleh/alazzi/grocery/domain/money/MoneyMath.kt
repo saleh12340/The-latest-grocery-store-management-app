@@ -18,6 +18,17 @@ object MoneyMath {
         return rounded.longValueExact()
     }
 
+    /** Derives an integer unit price from a user-entered line total without floating-point rounding. */
+    fun unitPriceFromLineTotal(lineTotal: Long, quantityMilli: Long): Long {
+        require(lineTotal >= 0) { "Line total cannot be negative" }
+        require(quantityMilli > 0) { "Quantity must be positive" }
+        val numerator = BigInteger.valueOf(lineTotal).multiply(THOUSAND)
+        val denominator = BigInteger.valueOf(quantityMilli)
+        val result = numerator.divideAndRemainder(denominator)
+        require(result[1] == BigInteger.ZERO) { "Line total does not produce a whole-rial unit price" }
+        return result[0].longValueExact()
+    }
+
     fun total(lines: Iterable<Long>, discount: Long): Long {
         require(discount >= 0) { "Discount cannot be negative" }
         val subtotal = lines.fold(BigInteger.ZERO) { acc, value ->
