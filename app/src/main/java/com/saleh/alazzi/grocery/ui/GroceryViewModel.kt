@@ -273,6 +273,26 @@ class GroceryViewModel(
         }
     }
 
+    fun addCustomerDebit(customerId: String, amount: Long, note: String, operationId: String) {
+        viewModelScope.launch {
+            runCatching {
+                require(_session.value?.role == "MANAGER") { "إضافة الديون اليدوية للمدير فقط" }
+                repository.addCustomerDebit(operationId, customerId, amount, note)
+            }.onSuccess { eventChannel.send("تمت إضافة الدين وتحديث رصيد العميل") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر إضافة الدين")) }
+        }
+    }
+
+    fun addSupplierDebit(supplierId: String, amount: Long, note: String, operationId: String) {
+        viewModelScope.launch {
+            runCatching {
+                require(_session.value?.role == "MANAGER") { "إضافة المستحقات اليدوية للمدير فقط" }
+                repository.addSupplierDebit(operationId, supplierId, amount, note)
+            }.onSuccess { eventChannel.send("تمت إضافة المستحق وتحديث رصيد المورد") }
+                .onFailure { eventChannel.send(messageFor(it, "تعذر إضافة المستحق")) }
+        }
+    }
+
     fun receiveCustomerPayment(customerId: String, amount: Long, note: String, operationId: String) {
         viewModelScope.launch {
             runCatching {
