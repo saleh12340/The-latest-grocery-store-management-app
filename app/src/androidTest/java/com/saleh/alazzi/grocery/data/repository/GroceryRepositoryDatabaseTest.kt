@@ -83,6 +83,25 @@ class GroceryRepositoryDatabaseTest {
     }
 
     @Test
+    fun settlementsZeroBalancesWithoutDeletingHistoryOrChangingCash() = runBlocking {
+        repository.addCustomerDebit("customer-opening", "customer-1", 2_500L, "رصيد سابق", now)
+        repository.addSupplierDebit("supplier-opening", "supplier-1", 3_500L, "مستحق سابق", now)
+
+        repository.settleCustomerBalance("customer-settle", "customer-1", "تصفير الحساب", now + 1)
+        repository.settleCustomerBalance("customer-settle", "customer-1", "إعادة محاولة", now + 2)
+        repository.settleSupplierBalance("supplier-settle", "supplier-1", "تصفير الحساب", now + 3)
+        repository.settleSupplierBalance("supplier-settle", "supplier-1", "إعادة محاولة", now + 4)
+
+        assertEquals(0L, database.customers().findById("customer-1")!!.balance)
+        assertEquals(0L, database.suppliers().findById("supplier-1")!!.balance)
+        assertEquals(2, database.ledger().observeCustomer("customer-1").first().size)
+        assertEquals(2, database.ledger().observeSupplier("supplier-1").first().size)
+        assertEquals(0L, database.cash().observeBalance().first())
+        assertEquals(0L, database.ledger().observeCustomer("customer-1").first().first().balanceAfter)
+        assertEquals(0L, database.ledger().observeSupplier("supplier-1").first().first().balanceAfter)
+    }
+
+    @Test
     fun salePostsInvoiceStockLedgerAndCashExactlyOnce() = runBlocking {
         val input = CreateInvoiceInput(
             operationId = "sale-operation-001",
