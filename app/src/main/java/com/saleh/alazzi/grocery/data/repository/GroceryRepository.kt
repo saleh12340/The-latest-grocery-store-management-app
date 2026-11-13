@@ -329,6 +329,56 @@ class GroceryRepository(private val database: GroceryDatabase) {
             )
             SaveInvoiceResult(invoiceId, invoiceNumber, false)
         }
+    suspend fun settleCustomerBalance(
+        operationId: String,
+        customerId: String,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank()) { "معرف التسوية مطلوب" }
+        if (database.ledger().findCustomerOperation("$operationId:ledger") != null) return@withTransaction
+        val customer = database.customers().findById(customerId) ?: error("العميل غير موجود")
+        val settledAmount = customer.balance
+        require(settledAmount > 0) { "رصيد العميل صفر ولا يحتاج إلى تسوية" }
+        database.ledger().insertCustomer(
+            CustomerTransactionEntity(
+                id = UUID.randomUUID().toString(), operationId = "$operationId:ledger",
+                customerId = customerId, type = "SETTLEMENT", amount = settledAmount,
+                balanceAfter = 0L, sourceType = "MANUAL_SETTLEMENT", sourceId = operationId,
+                note = note, createdAt = createdAt
+            )
+        )
+        check(database.customers().setBalance(customerId, 0L, createdAt) == 1)
+        database.references().insertActivity(
+            ActivityLogEntity(UUID.randomUUID().toString(), null, "CUSTOMER_SETTLEMENT", "CUSTOMER", customerId, "تصفير رصيد العميل: $settledAmount", createdAt)
+        )
+    }
+
+    suspend fun settleSupplierBalance(
+        operationId: String,
+        supplierId: String,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank()) { "معرف التسوية مطلوب" }
+        if (database.ledger().findSupplierOperation("$operationId:ledger") != null) return@withTransaction
+        val supplier = database.suppliers().findById(supplierId) ?: error("المورد غير موجود")
+        val settledAmount = supplier.balance
+        require(settledAmount > 0) { "رصيد المورد صفر ولا يحتاج إلى تسوية" }
+        database.ledger().insertSupplier(
+            SupplierTransactionEntity(
+                id = UUID.randomUUID().toString(), operationId = "$operationId:ledger",
+                supplierId = supplierId, type = "SETTLEMENT", amount = settledAmount,
+                balanceAfter = 0L, sourceType = "MANUAL_SETTLEMENT", sourceId = operationId,
+                note = note, createdAt = createdAt
+            )
+        )
+        check(database.suppliers().setBalance(supplierId, 0L, createdAt) == 1)
+        database.references().insertActivity(
+            ActivityLogEntity(UUID.randomUUID().toString(), null, "SUPPLIER_SETTLEMENT", "SUPPLIER", supplierId, "تصفير رصيد المورد: $settledAmount", createdAt)
+        )
+    }
+
     suspend fun addCustomerDebit(
         operationId: String,
         customerId: String,
