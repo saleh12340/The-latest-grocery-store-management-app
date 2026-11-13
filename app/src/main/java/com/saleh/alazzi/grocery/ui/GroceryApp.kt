@@ -516,6 +516,22 @@ private fun AddItemDialog(viewModel: GroceryViewModel, initialName: String = "",
     )
 }
 
+private fun normalizeInvoiceNumber(value: String): String = value
+    .map { ch -> when (ch) {
+        in '٠'..'٩' -> ('0'.code + (ch.code - '٠'.code)).toChar()
+        in '۰'..'۹' -> ('0'.code + (ch.code - '۰'.code)).toChar()
+        else -> ch
+    } }.joinToString("")
+
+private fun parseWholeAmount(value: String): Long? = runCatching {
+    normalizeInvoiceNumber(value).replace(",", "").replace("٬", "").trim().toLong()
+}.getOrNull()?.takeIf { it >= 0 }
+
+private fun parseQuantityMilli(value: String): Long? = runCatching {
+    BigDecimal(normalizeInvoiceNumber(value).replace(",", "").replace("٬", "").replace("٫", ".").trim())
+        .multiply(BigDecimal("1000")).longValueExact()
+}.getOrNull()?.takeIf { it > 0 }
+
 private data class DraftInvoiceLine(
     val itemId: String,
     val name: String,
@@ -557,7 +573,7 @@ private fun InvoiceEntryScreen(
     var showAddItem by remember { mutableStateOf(false) }
     var selectedAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var quantity by rememberSaveable { mutableStateOf("1") }
-    var unitPrice by rememberSaveable { mutableStateOf("") }
+    var lineTotalInput by rememberSaveable { mutableStateOf("") }
     var discount by rememberSaveable { mutableStateOf("0") }
     var paid by rememberSaveable { mutableStateOf("0") }
     var cart by rememberSaveable(stateSaver = DraftInvoiceCartSaver) { mutableStateOf<List<DraftInvoiceLine>>(emptyList()) }
@@ -574,11 +590,12 @@ private fun InvoiceEntryScreen(
     }
     val accounts = if (isSale) customers.map { it.id to it.name } else suppliers.map { it.id to it.name }
     val selectedAccountName = accounts.firstOrNull { it.first == selectedAccountId }?.second
-    val quantityMilli = runCatching { BigDecimal(quantity).multiply(BigDecimal("1000")).longValueExact() }.getOrNull()
-    val priceValue = unitPrice.toLongOrNull()
-    val draftLineTotal = if (quantityMilli != null && priceValue != null && quantityMilli > 0 && priceValue >= 0) {
-        runCatching { MoneyMath.lineTotal(quantityMilli, priceValue) }.getOrNull()
+    val quantityMilli = parseQuantityMilli(quantity)
+    val enteredLineTotal = parseWholeAmount(lineTotalInput)
+    val priceValue = if (quantityMilli != null && enteredLineTotal != null) {
+        runCatching { MoneyMath.unitPriceFromLineTotal(enteredLineTotal, quantityMilli) }.getOrNull()
     } else null
+    val draftLineTotal = if (priceValue != null) enteredLineTotal else null
     val subtotal = runCatching { cart.fold(0L) { sum, line -> Math.addExact(sum, line.lineTotal) } }.getOrNull()
     val discountValue = discount.toLongOrNull()
     val finalTotal = if (subtotal != null && discountValue != null && discountValue >= 0 && discountValue <= subtotal) {
@@ -625,7 +642,7 @@ private fun InvoiceEntryScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable {
                         selectedItemId = item.id
-                        unitPrice = (if (isSale) item.salePrice else item.purchasePrice).toString()
+                        lineTotalInput = ""
                     },
                     colors = CardDefaults.cardColors(
                         containerColor = if (selectedItemId == item.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
@@ -649,10 +666,28 @@ private fun InvoiceEntryScreen(
         if (selectedItem != null) {
             Text("الصنف المحدد: ${selectedItem.name}", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(quantity, { quantity = it }, modifier = Modifier.weight(1f), label = { Text("الكمية") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                OutlinedTextField(unitPrice, { unitPrice = it }, modifier = Modifier.weight(1f), label = { Text("سعر الوحدة") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(
+                    value = lineTotalInput,
+                    onValueChange = { lineTotalInput = it.filter { ch -> ch.isDigit() || ch in "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹,٬" } },
+                    modifier = Modifier.weight(1.2f),
+                    label = { Text("الإجمالي") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                OutlinedTextField(
+                    value = quantity,
+                    onValueChange = { quantity = it.filter { ch -> ch.isDigit() || ch in "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹.,٫" } },
+                    modifier = Modifier.weight(0.8f),
+                    label = { Text("الكمية") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
             }
-            Text("إجمالي السطر: ${draftLineTotal ?: "—"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "سعر الوحدة المحسوب: ${priceValue ?: "—"}    إجمالي السطر: ${draftLineTotal ?: "—"}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
             Button(
                 onClick = {
                     val qty = quantityMilli ?: return@Button
@@ -672,7 +707,7 @@ private fun InvoiceEntryScreen(
                     }
                     selectedItemId = null
                     quantity = "1"
-                    unitPrice = ""
+                    lineTotalInput = ""
                 },
                 enabled = quantityMilli != null && quantityMilli > 0 && priceValue != null && priceValue >= 0 && draftLineTotal != null,
                 modifier = Modifier.fillMaxWidth()
@@ -724,7 +759,7 @@ private fun InvoiceEntryScreen(
                         operationId = UUID.randomUUID().toString()
                         selectedItemId = null
                         quantity = "1"
-                        unitPrice = ""
+                        lineTotalInput = ""
                         discount = "0"
                         paid = "0"
                         cart = emptyList()
