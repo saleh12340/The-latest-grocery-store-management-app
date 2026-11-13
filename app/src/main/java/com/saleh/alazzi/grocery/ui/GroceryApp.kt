@@ -627,7 +627,7 @@ private fun InvoiceEntryScreen(
         Box(Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = itemQuery,
-                onValueChange = { itemQuery = it; itemMenuExpanded = it.isNotBlank() },
+                onValueChange = { itemQuery = it; selectedItemId = null; itemMenuExpanded = it.isNotBlank() },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("ابحث عن الصنف بالاسم أو الباركود") },
                 singleLine = true
