@@ -69,6 +69,20 @@ class GroceryRepositoryDatabaseTest {
     }
 
     @Test
+    fun manualCustomerAndSupplierDebitsAreAtomicAndIdempotent() = runBlocking {
+        repository.addCustomerDebit("customer-debit-1", "customer-1", 500L, "رصيد افتتاحي", now)
+        repository.addCustomerDebit("customer-debit-1", "customer-1", 900L, "إعادة محاولة", now + 1)
+        repository.addSupplierDebit("supplier-debit-1", "supplier-1", 700L, "فاتورة يدوية", now + 2)
+        repository.addSupplierDebit("supplier-debit-1", "supplier-1", 1_100L, "إعادة محاولة", now + 3)
+
+        assertEquals(500L, database.customers().findById("customer-1")!!.balance)
+        assertEquals(700L, database.suppliers().findById("supplier-1")!!.balance)
+        assertEquals(1, database.ledger().observeCustomer("customer-1").first().size)
+        assertEquals(1, database.ledger().observeSupplier("supplier-1").first().size)
+        assertEquals(0L, database.cash().observeBalance().first())
+    }
+
+    @Test
     fun salePostsInvoiceStockLedgerAndCashExactlyOnce() = runBlocking {
         val input = CreateInvoiceInput(
             operationId = "sale-operation-001",
