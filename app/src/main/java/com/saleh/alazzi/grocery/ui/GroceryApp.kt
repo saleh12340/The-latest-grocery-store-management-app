@@ -869,12 +869,16 @@ private fun InvoiceEntryScreen(
 private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewModel: GroceryViewModel) {
     val transactions by viewModel.customerTransactions(id).collectAsState(initial = emptyList())
     var showPayment by remember { mutableStateOf(false) }
+    var showDebit by remember { mutableStateOf(false) }
     if (customer == null) { EmptyState("العميل غير موجود", "قد يكون السجل غير متاح"); return }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(customer.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(customer.phone ?: "لا يوجد رقم هاتف")
         Text("الرصيد المستحق: ${customer.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
-        Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth()) { Text("قبض من العميل") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { showPayment = true }, modifier = Modifier.weight(1f)) { Text("قبض من العميل") }
+            FilledTonalButton(onClick = { showDebit = true }, modifier = Modifier.weight(1f)) { Text("إضافة دين") }
+        }
         Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر الفواتير والدفعات هنا")
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -882,7 +886,7 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
                 Card {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Row {
-                            Text(if (tx.type == "PAYMENT") "تسديد / قبض" else tx.type, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(when (tx.type) { "PAYMENT" -> "تسديد / قبض"; "DEBIT" -> "إضافة دين"; else -> tx.type }, Modifier.weight(1f), fontWeight = FontWeight.Bold)
                             Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
                         }
                         Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -892,6 +896,11 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
             }
         }
     }
+    if (showDebit) AccountChargeDialog(
+        title = "إضافة دين على العميل",
+        onSave = { amount, note, operationId -> viewModel.addCustomerDebit(id, amount, note, operationId); showDebit = false },
+        onDismiss = { showDebit = false }
+    )
     if (showPayment) PaymentDialog(
         title = "قبض من العميل",
         maxAmount = customer.balance,
@@ -904,12 +913,16 @@ private fun CustomerAccountScreen(id: String, customer: CustomerEntity?, viewMod
 private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewModel: GroceryViewModel) {
     val transactions by viewModel.supplierTransactions(id).collectAsState(initial = emptyList())
     var showPayment by remember { mutableStateOf(false) }
+    var showDebit by remember { mutableStateOf(false) }
     if (supplier == null) { EmptyState("المورد غير موجود", "قد يكون السجل غير متاح"); return }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(supplier.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(supplier.phone ?: "لا يوجد رقم هاتف")
         Text("المبلغ المستحق للمورد: ${supplier.balance}", color = Color(0xFFB42318), style = MaterialTheme.typography.titleLarge)
-        Button(onClick = { showPayment = true }, modifier = Modifier.fillMaxWidth()) { Text("دفع للمورد") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { showPayment = true }, modifier = Modifier.weight(1f)) { Text("دفع للمورد") }
+            FilledTonalButton(onClick = { showDebit = true }, modifier = Modifier.weight(1f)) { Text("إضافة مستحق") }
+        }
         Text("سجل العمليات", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (transactions.isEmpty()) EmptyState("لا توجد عمليات", "ستظهر فواتير الشراء والدفعات هنا")
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -917,7 +930,7 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
                 Card {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Row {
-                            Text(if (tx.type == "PAYMENT") "دفع للمورد" else tx.type, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(when (tx.type) { "PAYMENT" -> "دفع للمورد"; "DEBIT" -> "إضافة مستحق"; else -> tx.type }, Modifier.weight(1f), fontWeight = FontWeight.Bold)
                             Text(tx.amount.toString(), color = if (tx.type == "PAYMENT") Color(0xFF16804A) else Color(0xFFB42318))
                         }
                         Text(tx.note ?: tx.sourceType, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -927,11 +940,46 @@ private fun SupplierAccountScreen(id: String, supplier: SupplierEntity?, viewMod
             }
         }
     }
+    if (showDebit) AccountChargeDialog(
+        title = "إضافة مستحق للمورد",
+        onSave = { amount, note, operationId -> viewModel.addSupplierDebit(id, amount, note, operationId); showDebit = false },
+        onDismiss = { showDebit = false }
+    )
     if (showPayment) PaymentDialog(
         title = "دفع للمورد",
         maxAmount = supplier.balance,
         onSave = { amount, note, operationId -> viewModel.paySupplier(id, amount, note, operationId); showPayment = false },
         onDismiss = { showPayment = false }
+    )
+}
+
+@Composable
+private fun AccountChargeDialog(title: String, onSave: (Long, String, String) -> Unit, onDismiss: () -> Unit) {
+    var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var note by rememberSaveable { mutableStateOf("") }
+    val parsedAmount = parseWholeAmount(amount)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch in "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹,٬" } },
+                    label = { Text("المبلغ") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                OutlinedTextField(note, { note = it }, label = { Text("البيان (اختياري)") })
+            }
+        },
+        confirmButton = {
+            Button(onClick = { parsedAmount?.let { if (it > 0) onSave(it, note, operationId) } }, enabled = parsedAmount != null && parsedAmount > 0) {
+                Text("حفظ العملية")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
