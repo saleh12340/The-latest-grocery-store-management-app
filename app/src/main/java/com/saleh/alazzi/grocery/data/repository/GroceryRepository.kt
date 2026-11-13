@@ -329,6 +329,56 @@ class GroceryRepository(private val database: GroceryDatabase) {
             )
             SaveInvoiceResult(invoiceId, invoiceNumber, false)
         }
+    suspend fun addCustomerDebit(
+        operationId: String,
+        customerId: String,
+        amount: Long,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank() && amount > 0) { "بيانات الدين غير صحيحة" }
+        if (database.ledger().findCustomerOperation("$operationId:ledger") != null) return@withTransaction
+        val customer = database.customers().findById(customerId) ?: error("العميل غير موجود")
+        val newBalance = MoneyMath.addBalance(customer.balance, amount)
+        database.ledger().insertCustomer(
+            CustomerTransactionEntity(
+                id = UUID.randomUUID().toString(), operationId = "$operationId:ledger",
+                customerId = customerId, type = "DEBIT", amount = amount,
+                balanceAfter = newBalance, sourceType = "MANUAL_DEBIT", sourceId = operationId,
+                note = note, createdAt = createdAt
+            )
+        )
+        check(database.customers().setBalance(customerId, newBalance, createdAt) == 1)
+        database.references().insertActivity(
+            ActivityLogEntity(UUID.randomUUID().toString(), null, "CUSTOMER_DEBIT", "CUSTOMER", customerId, "إضافة دين بقيمة $amount", createdAt)
+        )
+    }
+
+    suspend fun addSupplierDebit(
+        operationId: String,
+        supplierId: String,
+        amount: Long,
+        note: String? = null,
+        createdAt: Long = System.currentTimeMillis()
+    ) = database.withTransaction {
+        require(operationId.isNotBlank() && amount > 0) { "بيانات المستحق غير صحيحة" }
+        if (database.ledger().findSupplierOperation("$operationId:ledger") != null) return@withTransaction
+        val supplier = database.suppliers().findById(supplierId) ?: error("المورد غير موجود")
+        val newBalance = MoneyMath.addBalance(supplier.balance, amount)
+        database.ledger().insertSupplier(
+            SupplierTransactionEntity(
+                id = UUID.randomUUID().toString(), operationId = "$operationId:ledger",
+                supplierId = supplierId, type = "DEBIT", amount = amount,
+                balanceAfter = newBalance, sourceType = "MANUAL_DEBIT", sourceId = operationId,
+                note = note, createdAt = createdAt
+            )
+        )
+        check(database.suppliers().setBalance(supplierId, newBalance, createdAt) == 1)
+        database.references().insertActivity(
+            ActivityLogEntity(UUID.randomUUID().toString(), null, "SUPPLIER_DEBIT", "SUPPLIER", supplierId, "إضافة مستحق بقيمة $amount", createdAt)
+        )
+    }
+
     suspend fun receiveCustomerPayment(
         operationId: String,
         customerId: String,
