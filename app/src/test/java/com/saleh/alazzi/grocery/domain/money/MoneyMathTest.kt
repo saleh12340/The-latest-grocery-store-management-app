@@ -13,6 +13,17 @@ class MoneyMathTest {
         assertEquals(2L, MoneyMath.lineTotal(500, 3))
     }
 
+    @Test fun derivesUnitPriceFromEnteredLineTotalExactly() {
+        assertEquals(2_000L, MoneyMath.unitPriceFromLineTotal(4_000L, 2_000L))
+        assertEquals(250L, MoneyMath.unitPriceFromLineTotal(375L, 1_500L))
+    }
+
+    @Test fun rejectsLineTotalsThatCannotProduceWholeRialUnitPrice() {
+        assertThrows(IllegalArgumentException::class.java) {
+            MoneyMath.unitPriceFromLineTotal(1L, 3L)
+        }
+    }
+
     @Test fun calculatesDiscountedTotal() {
         assertEquals(950L, MoneyMath.total(listOf(400L, 700L), 150L))
     }
